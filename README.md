@@ -1,48 +1,76 @@
-# 🏥 Healthcare Diagnostic Chatbot
-### AI-Powered Symptom Checker Using Machine Learning
+# 🏥 Medisense: Advanced Multi-Agent Medical AI Assistant
 
-The **Healthcare Diagnostic Chatbot** is an ML-driven interactive system that predicts potential diseases based on user-reported symptoms. It leverages **Decision Tree classification**, **SVM validation**, and a structured medical knowledge base to provide:
-
-- 🩺 Disease prediction  
-- 📊 Symptom severity assessment  
-- 📚 Condition descriptions  
-- 🛡️ Precaution recommendations  
-- 🎤 Optional text-to-speech interaction  
-
-This project is intended for **educational and research purposes**, demonstrating applied machine learning and rule-based reasoning in healthcare.
+Medisense is a state-of-the-art, multi-agent medical diagnostic system designed to provide high-precision health insights. Unlike traditional symptom checkers, Medisense employs a **collaborative AI architecture** where specialized agents work together to extract symptoms, retrieve medical knowledge, evaluate risks, and perform iterative clinical interviewing.
 
 ---
 
-## 🚀 Features
+## 🌟 Core Features
 
-### 🔍 Machine Learning Pipeline
-- **Decision Tree Classifier** for primary disease prediction  
-- **SVM model** for secondary accuracy validation  
-- Automated feature encoding and training from CSV datasets  
+### 🧠 Collaborative Multi-Agent Architecture
+- **Clinical Intake Agent**: Extracts symptoms from natural language and conversational history.
+- **Diagnostic RAG Agent**: High-speed retrieval from a vector database of 4,900+ disease mappings.
+- **Triage & Risk Agent**: Real-time evaluation of symptom severity and emergency alerting.
+- **Pure LLM Diagnostician**: Leverages `openai/gpt-oss-120b` for deep medical reasoning.
+- **Consensus Synthesizer**: Resolves discrepancies between agents to provide a final, verified diagnosis.
+- **Translation Agent**: Automatic multi-lingual support (Hindi, Spanish, etc.) for all user interactions.
+- **Follow-up Agent**: Generates targeted clinical questions to refine diagnostic accuracy.
 
-### 💬 Symptom Interaction Engine
-- Pattern-matching for symptom input  
-- Regex-based suggestion of similar symptoms  
-- Interactive question flow based on decision-tree traversal  
+### 🔄 Iterative Clinical Interviewing
+Medisense doesn't just guess; it interviews. If your symptoms are ambiguous, the system enters an investigative mode, asking 2-3 targeted follow-up questions to differentiate between potential conditions before reaching a high-confidence diagnosis.
 
-### 🧠 Severity & Condition Assessment
-- Severity scoring using predefined symptom weights  
-- Consultation recommendation based on score thresholds  
+### 👤 Personalized Onboarding
+Every session begins with a structured profile setup (Age, Gender, Location, Medical History). This context is injected into every agent's reasoning process, ensuring that age-specific or location-specific health factors are always considered.
 
-### 📘 CSV-Driven Medical Knowledge Base
-- `symptom_Description.csv` — disease definitions  
-- `symptom_precaution.csv` — recommended precautions  
-- `symptom_severity.csv` — symptom severity weights  
-- `Training.csv` & `Testing.csv` — ML dataset  
-
-### 🔊 Optional Speech Output
-- Text-to-speech responses via **pyttsx3**
+### 🌍 Global Accessibility
+Full support for multi-lingual input and output. Speak in your native language, and Medisense will respond in kind, preserving the medical accuracy of the translation.
 
 ---
 
-## 📦 Installation
+## 🛠️ Technology Stack
 
-### 1. Clone the Repository
+- **Backend**: Python, FastAPI, Uvicorn
+- **AI Models**: `openai/gpt-oss-120b` via Groq
+- **Database**: ChromaDB (Vector Search)
+- **Frontend**: React, Vite, TypeScript, TailwindCSS
+- **Search**: Tavily API (Medical Updates)
+
+---
+
+## 🚀 Getting Started
+
+### 1. Prerequisites
+- Python 3.10+
+- Node.js & npm/yarn
+- Groq API Key
+- Tavily API Key (Optional, for web updates)
+
+### 2. Backend Setup
 ```bash
-git clone https://github.com/<your-username>/healthcare-chatbot.git
-cd healthcare-chatbot
+# Install dependencies
+pip install -r requirements.txt
+
+# Configure environment
+# Create a .env file with:
+# GROQ_API_KEY=your_key
+# TAVILY_API_KEY=your_key
+
+# Start the API server
+python api_server.py
+```
+
+### 3. Frontend Setup
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+---
+
+## 📄 Documentation
+For a detailed breakdown of each agent's internal logic and the system architecture, please refer to [details.md](file:///c:/Users/Avinash/OneDrive/Desktop/Ideathon/details.md).
+
+---
+
+> [!CAUTION]
+> **Medical Disclaimer**: Medisense is an AI-powered tool for informational purposes only. It is NOT a substitute for professional medical advice, diagnosis, or treatment. Always seek the advice of your physician or other qualified health provider with any questions you may have regarding a medical condition. In case of emergency, call your local emergency services immediately.
