@@ -11,6 +11,10 @@ from agent_5_pure_llm import PureLLMAgent
 from agent_6_combiner import ConsensusSynthesizerAgent
 from agent_7_translator import TranslationAgent
 from agent_8_followup import FollowupAgent
+from agent_9_whisper import WhisperAgent
+import os
+import shutil
+from fastapi import UploadFile, File
 
 app = FastAPI(title="Medical Agent Workflow API")
 
@@ -48,6 +52,7 @@ class APIController:
         self.agent_6 = ConsensusSynthesizerAgent()
         self.translator = TranslationAgent()
         self.agent_8 = FollowupAgent()
+        self.agent_9 = WhisperAgent()
         
         self.description_dict = {}
         self.precaution_dict = {}
@@ -71,6 +76,25 @@ class APIController:
         except Exception as e:
             print(f"Warn: unable to fully load master data: {e}")
 
+    def _get_fuzzy_match(self, disease_name: str, data_dict: dict):
+        """Finds a key in the dictionary that closely matches the disease_name."""
+        # Exact match first
+        if disease_name in data_dict:
+            return data_dict[disease_name]
+        
+        # Simple normalization: lowercase and strip
+        norm_name = disease_name.lower().strip().replace("-", " ")
+        for key in data_dict.keys():
+            if key.lower().strip().replace("-", " ") == norm_name:
+                return data_dict[key]
+        
+        # Substring match (e.g. "Tension Headache" in "Tension-type headache")
+        for key in data_dict.keys():
+            if norm_name in key.lower() or key.lower() in norm_name:
+                return data_dict[key]
+                
+        return None
+
 controller = APIController()
 
 @app.post("/chat")
@@ -79,10 +103,21 @@ async def process_chat(request: ChatRequest):
     user_metadata = request.user_data
     chat_history = request.chat_history or []
 
+    # Step 0: Check for Closing Statements
+    closing_keywords = ["thank you", "thanks", "okay bye", "goodbye", "shukriya", "dhanyavad"]
+    if any(k in user_input.lower() for k in closing_keywords) and len(chat_history) > 2:
+        return {
+            "type": "info",
+            "message": "You're very welcome. I'm glad I could help. Please don't hesitate to reach out if your symptoms change or if you have more questions. Take care!",
+            "symptoms_identified": []
+        }
+
     # Step 1: Extract Symptoms from current input and history
     context_prefix = ""
     if user_metadata:
-        context_prefix = f"[User Profile: {user_metadata.age}yo {user_metadata.gender}, Location: {user_metadata.location}, History: {user_metadata.medical_history}]\n"
+        age_str = user_metadata.age if user_metadata.age.lower() not in ["i don't know", "unknown", "dont know"] else "Unknown age"
+        gender_str = user_metadata.gender if user_metadata.gender.lower() not in ["i don't know", "unknown", "dont know"] else "Unknown gender"
+        context_prefix = f"[User Profile: {age_str} {gender_str}, Location: {user_metadata.location}, History: {user_metadata.medical_history}]\n"
     
     # We pass the history so Agent 1 can see previous symptoms/confirmations
     extracted_symptoms = controller.agent_1.extract_symptoms(user_input, chat_history=chat_history)
@@ -101,12 +136,14 @@ async def process_chat(request: ChatRequest):
         db_predictions = controller.agent_2.retrieve_disease(extracted_symptoms, top_k=3)
         llm_predictions = controller.agent_5.predict(extracted_symptoms, patient_info=context_prefix)
         consensus = controller.agent_6.synthesize(extracted_symptoms, db_predictions, llm_predictions, patient_info=context_prefix, chat_history=chat_history)
+        hypotheses = consensus["hypotheses"]
         
         response_data = {
             "type": "alert",
             "message": f"EMERGENCY ALERT! Your symptoms calculate to a critical risk score ({risk_score}). Halting normal flow. Please seek immediate medical consultation or visit the ER.",
-            "diseases": consensus["final_rankings"],
-            "reasoning": consensus["reasoning"],
+            "diseases": [h["disease"] for h in hypotheses],
+            "hypotheses": hypotheses,
+            "reasoning": consensus["overall_reasoning"],
             "risk_score": risk_score,
             "symptoms_identified": extracted_symptoms
         }
@@ -140,8 +177,8 @@ async def process_chat(request: ChatRequest):
     if hypotheses:
         primary_h = hypotheses[0]
         primary_disease = primary_h["disease"]
-        desc = controller.description_dict.get(primary_disease, "Detailed description not currently available.")
-        prec = controller.precaution_dict.get(primary_disease, [])
+        desc = controller._get_fuzzy_match(primary_disease, controller.description_dict) or "Detailed description not currently available."
+        prec = controller._get_fuzzy_match(primary_disease, controller.precaution_dict) or []
         
         # Calculate urgency based on risk score + medical context
         urgency = "Normal"
@@ -167,6 +204,24 @@ async def process_chat(request: ChatRequest):
             "symptoms_identified": extracted_symptoms
         }
         return controller.translator.translate_response(user_input, response_data)
+
+@app.post("/transcribe")
+async def transcribe_audio(file: UploadFile = File(...), language: str = None):
+    # Save temp file
+    temp_dir = "temp_audio"
+    os.makedirs(temp_dir, exist_ok=True)
+    file_path = os.path.join(temp_dir, file.filename)
+    
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    
+    try:
+        text = controller.agent_9.transcribe(file_path, language=language)
+        return {"text": text}
+    finally:
+        # Cleanup
+        if os.path.exists(file_path):
+            os.remove(file_path)
 
 @app.post("/update_disease")
 async def update_disease(request: UpdateRequest):

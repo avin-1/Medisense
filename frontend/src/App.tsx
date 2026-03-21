@@ -55,52 +55,114 @@ function App() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
+  const [selectedLanguage, setSelectedLanguage] = useState<string>("en");
+  const [isRecording, setIsRecording] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) audioChunksRef.current.push(event.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
+        await handleAudioUpload(audioBlob);
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (err) {
+      console.error("Recording Error:", err);
+      alert("Could not access microphone.");
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  };
+
+  const handleAudioUpload = async (blob: Blob) => {
+    setLoading(true);
+    const formData = new FormData();
+    formData.append("file", blob, "recording.wav");
+    if (selectedLanguage) {
+      formData.append("language", selectedLanguage);
+    }
+
+    try {
+      const res = await fetch("http://localhost:8000/transcribe", {
+        method: "POST",
+        body: formData
+      });
+      const data = await res.json();
+      if (data.text) {
+        // Auto-send the transcribed text
+        await processDiagnosticFlow(data.text);
+      }
+    } catch (error) {
+      console.error("Transcription Error:", error);
+    }
+    setLoading(false);
+  };
+
   const handleSend = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!input.trim()) return;
-
     const userText = input.trim();
+    setInput("");
+    await processDiagnosticFlow(userText);
+  };
+
+  const processDiagnosticFlow = async (text: string) => {
     const userMsg: Message = {
       id: Date.now().toString(),
       sender: "user",
-      text: userText
+      text: text
     };
 
     setMessages(prev => [...prev, userMsg]);
-    setInput("");
 
     // Handle Onboarding Steps
     if (step === 'AGE') {
-      setUserData(prev => ({ ...prev, age: userText }));
+      setUserData(prev => ({ ...prev, age: text }));
       setStep('GENDER');
       setMessages(prev => [...prev, { id: Date.now().toString() + "bot", sender: "bot", text: "Got it. What is your gender?", type: "clarification" }]);
       return;
     }
     if (step === 'GENDER') {
-      setUserData(prev => ({ ...prev, gender: userText }));
+      setUserData(prev => ({ ...prev, gender: text }));
       setStep('LOCATION');
       setMessages(prev => [...prev, { id: Date.now().toString() + "bot", sender: "bot", text: "Thank you. Where are you currently located?", type: "clarification" }]);
       return;
     }
     if (step === 'LOCATION') {
-      setUserData(prev => ({ ...prev, location: userText }));
+      setUserData(prev => ({ ...prev, location: text }));
       setStep('HISTORY');
       setMessages(prev => [...prev, { id: Date.now().toString() + "bot", sender: "bot", text: "Nearly there. Do you have any existing medical conditions or history I should know about? (Type 'None' if not)", type: "clarification" }]);
       return;
     }
     if (step === 'HISTORY') {
-      setUserData(prev => ({ ...prev, medical_history: userText }));
+      setUserData(prev => ({ ...prev, medical_history: text }));
       setStep('SYMPTOMS');
       setMessages(prev => [...prev, { id: Date.now().toString() + "bot", sender: "bot", text: "Profile updated. Now, please describe the symptoms you are currently experiencing.", type: "clarification" }]);
       return;
     }
 
-    // Normal Symptom Processing
     setLoading(true);
-
     try {
-      if (userText.toLowerCase().startsWith('/update ')) {
-        const disease = userText.slice(8).trim();
+      if (text.toLowerCase().startsWith('/update ')) {
+        const disease = text.slice(8).trim();
         const res = await fetch("http://localhost:8000/update_disease", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -114,18 +176,14 @@ function App() {
           type: "update"
         }]);
       } else {
-        // Filter out specific onboarding bot messages and start from when symptoms begin
         const symptomMessages = messages.filter(m => {
-          // If it's a bot message, we only want it if it's NOT an onboarding prompt
           if (m.sender === 'bot') {
             return !['Welcome to Medisense.', 'Got it. What is your gender?', 'Thank you. Where are you currently located?', 'Nearly there. Do you have any existing medical conditions', 'Profile updated. Now, please describe'].some(t => m.text.includes(t));
           }
-          // If it's a user message, we only want it if it was sent AFTER the onboarding HISTORY step
-          // Since messages are in order, we can filter by type or content
           return true; 
         });
 
-        const chatHistoryForBackend = symptomMessages.map(m => ({
+        const chatHistoryForBackend = [...symptomMessages, userMsg].map(m => ({
           role: m.sender === 'user' ? 'user' : 'assistant',
           content: m.text
         }));
@@ -134,7 +192,7 @@ function App() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ 
-            user_input: userText,
+            user_input: text,
             user_data: userData,
             chat_history: chatHistoryForBackend
           })
@@ -151,12 +209,9 @@ function App() {
           sender: "bot",
           text: botText,
           type: data.type,
-          disease: data.disease,
-          diseases: data.diseases,
           hypotheses: data.hypotheses,
           reasoning: data.reasoning,
           precautions: data.precautions,
-          riskScore: data.risk_score,
           urgency: data.urgency
         }]);
       }
@@ -175,8 +230,8 @@ function App() {
     <div className="app-container">
       <div className="chat-window">
         <header className="chat-header">
-          <h1>Medical Agent AI</h1>
-          <span className="status">Online</span>
+          <h1>Medisense AI</h1>
+          <span className="status">Diagnostic Center</span>
         </header>
 
         <div className="chat-messages">
@@ -203,7 +258,7 @@ function App() {
                 {msg.type === 'diagnosis' && msg.urgency && (
                    <div style={{ marginTop: '12px' }}>
                      <div className="risk-indicator" style={{ 
-                       background: msg.urgency.includes('Immediate') ? 'rgba(239, 68, 68, 0.3)' : 'rgba(59, 130, 246, 0.3)',
+                       background: msg.urgency.includes('Immediate') ? 'rgba(239, 68, 68, 0.4)' : 'rgba(59, 130, 246, 0.4)',
                        color: 'white',
                        fontWeight: 'bold',
                        textAlign: 'center'
@@ -238,9 +293,47 @@ function App() {
         </div>
 
         <form className="chat-input-area" onSubmit={handleSend}>
+          <div className="mic-wrapper" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <button 
+              type="button" 
+              className={`mic-button ${isRecording ? 'recording' : ''}`}
+              onClick={isRecording ? stopRecording : startRecording}
+              style={{ 
+                background: isRecording ? '#ef4444' : 'rgba(255,255,255,0.1)',
+                borderRadius: '50%',
+                width: '40px',
+                height: '40px',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'white'
+              }}
+            >
+              {isRecording ? '⏹' : '🎤'}
+            </button>
+            <select 
+              value={selectedLanguage}
+              onChange={(e) => setSelectedLanguage(e.target.value)}
+              className="lang-selector"
+              style={{
+                background: 'rgba(255,255,255,0.1)',
+                border: 'none',
+                color: 'white',
+                borderRadius: '8px',
+                padding: '4px 8px',
+                fontSize: '0.8rem'
+              }}
+            >
+              <option value="en">EN</option>
+              <option value="hi">HI</option>
+              <option value="mr">MR</option>
+            </select>
+          </div>
           <input 
             type="text" 
-            placeholder="E.g., I have a bad headache, stiff neck, and high fever..." 
+            placeholder="Type or use mic..." 
             value={input}
             onChange={(e) => setInput(e.target.value)}
             disabled={loading}

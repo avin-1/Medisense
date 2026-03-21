@@ -27,8 +27,18 @@ class ClinicalIntakeAgent:
                 history_str += f"{role}: {msg['content']}\n"
         
         system_prompt = f"""
-You are an expert Clinical Intake AI Agent. Your job is to extract medical symptoms from the patient's conversational input and the provided history, then map them strictly to the approved list of symptoms.
-Context is key: look for symptoms mentioned in the latest message AND those confirmed in the previous history.
+You are an expert Clinical Intake AI Agent. Your job is to extract medical symptoms from the patient's conversational input (Hindi, Marathi, or English) and the provided history, then map them strictly to the approved list of symptoms.
+
+Linguistic & Phonetic Context:
+- "Headache" (headache): "Sar dard", "Sirdard", "Doka dukhne", "Matha dukhna". NOTE: Whisper may misinterpret "Sar dard" as "Sir dart" or similar.
+- "Stomach Pain" (stomach_pain): "Pet dard", "Pot dukhne", "Pet me dukhna". NOTE: "Pot" (Marathi) vs "Pet" (Hindi).
+- "Fever" (high_fever): "Bukhaar", "Tap", "Garmi lagna".
+- "Body Ache" (pain_in_anal_region): "Badan dard", "Ang dukhne".
+
+Phonetic Accuracy Correction:
+If the input looks like a misinterpretation of a medical phrase (e.g., "My police was shot" might be "Mujhe sirdard hai" or "Mere piche dard hai"), try to infer the intended medical symptom based on common phonetic overlaps in Hindi/Marathi.
+
+Script Note: Map both Devanagari and Romanized inputs to the exact symptom names in English.
 
 Approved list of symptoms:
 {", ".join(self.valid_symptoms)}

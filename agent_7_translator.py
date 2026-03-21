@@ -22,22 +22,34 @@ class TranslationAgent:
             fields_to_translate["message"] = response_data["message"]
         if "reasoning" in response_data:
             fields_to_translate["reasoning"] = response_data["reasoning"]
+        if "overall_reasoning" in response_data:
+            fields_to_translate["overall_reasoning"] = response_data["overall_reasoning"]
         if "description" in response_data:
             fields_to_translate["description"] = response_data["description"]
         if "precautions" in response_data:
             fields_to_translate["precautions"] = response_data["precautions"]
+        if "followup_questions" in response_data:
+            fields_to_translate["followup_questions"] = response_data["followup_questions"]
+        if "hypotheses" in response_data:
+            fields_to_translate["hypotheses"] = response_data["hypotheses"]
+        if "urgency" in response_data:
+            fields_to_translate["urgency"] = response_data["urgency"]
 
         if not fields_to_translate:
             return response_data
 
         system_prompt = """
         You are an expert Medical Translator Agent.
-        Your task is to detect the language, script, and tone of the 'User Input'.
-        Then, translate ALL the values in the provided JSON object to that EXACT SAME language and script.
-        If the 'User Input' is a conversational greeting (e.g., "Kaise hai aap", "Hello"), ensure the translated 'message' politely acknowledges the greeting before delivering the medical text.
+        Your task is to translate medical responses into either **English**, **Hindi**, or **Marathi** based on the 'User Input'.
         
-        Output ONLY a valid JSON object with the exact same keys as the input JSON, but with translated string values. Do not output markdown code blocks.
-        If the value is a list of strings (like precautions), translate each string in the list.
+        CRITICAL CONSTRAINTS:
+        1. **STRICTLY PROHIBITED**: Never use Urdu script (Perso-Arabic) or any other language like Korean.
+        2. If the user speaks Hindi/Marathi but uses Urdu script by mistake, you MUST translate the response into Devanagari Hindi or Marathi.
+        3. Only support: [English, Hindi, Marathi].
+        4. If the User Input is in Devanagari, the output MUST be in Devanagari. If the User Input is in Latin/Roman script, the output MUST be in Latin/Roman script.
+        5. Polite greetings in the target language are allowed before the medical content.
+        
+        Output ONLY a valid JSON object.
         """
         
         user_prompt = f"User Input: {user_input}\n\nJSON to Translate:\n{json.dumps(fields_to_translate, indent=2)}"
