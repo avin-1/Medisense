@@ -1,0 +1,11 @@
+scikit-learn
+pandas
+pyttsx3
+openai
+python-dotenv
+chromadb
+sentence-transformers
+groq
+tavily-python
+fastapi
+uvicorn

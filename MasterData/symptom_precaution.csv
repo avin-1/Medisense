@@ -1,0 +1,85 @@
+Drug Reaction,stop irritation,consult nearest hospital,stop taking drug,follow up
+Malaria,Consult nearest hospital,avoid oily food,avoid non veg food,keep mosquitos out
+Allergy,apply calamine,cover area with bandage,,use ice to compress itching
+Hypothyroidism,reduce stress,exercise,eat healthy,get proper sleep
+Psoriasis,wash hands with warm soapy water,stop bleeding using pressure,consult doctor,salt baths
+GERD,avoid fatty spicy food,avoid lying down after eating,maintain healthy weight,exercise
+Chronic cholestasis,cold baths,anti itch medicine,consult doctor,eat healthy
+hepatitis A,Consult nearest hospital,wash hands through,avoid fatty spicy food,medication
+Osteoarthristis,acetaminophen,consult nearest hospital,follow up,salt baths
+(vertigo) Paroymsal  Positional Vertigo,lie down,avoid sudden change in body,avoid abrupt head movment,relax
+Hypoglycemia,lie down on side,check in pulse,drink sugary drinks,consult doctor
+Acne,bath twice,avoid fatty spicy food,drink plenty of water,avoid too many products
+Diabetes ,have balanced diet,exercise,consult doctor,follow up
+Impetigo,soak affected area in warm water,use antibiotics,remove scabs with wet compressed cloth,consult doctor
+Hypertension ,meditation,salt baths,reduce stress,get proper sleep
+Peptic ulcer diseae,avoid fatty spicy food,consume probiotic food,eliminate milk,limit alcohol
+Dimorphic hemmorhoids(piles),avoid fatty spicy food,consume witch hazel,warm bath with epsom salt,consume alovera juice
+Common Cold,drink vitamin c rich drinks,take vapour,avoid cold food,keep fever in check
+Chicken pox,use neem in bathing ,consume neem leaves,take vaccine,avoid public places
+Cervical spondylosis,use heating pad or cold pack,exercise,take otc pain reliver,consult doctor
+Hyperthyroidism,eat healthy,massage,use lemon balm,take radioactive iodine treatment
+Urinary tract infection,drink plenty of water,increase vitamin c intake,drink cranberry juice,take probiotics
+Varicose veins,lie down flat and raise the leg high,use oinments,use vein compression,dont stand still for long
+AIDS,avoid open cuts,wear ppe if possible,consult doctor,follow up
+Paralysis (brain hemorrhage),massage,eat healthy,exercise,consult doctor
+Typhoid,eat high calorie vegitables,antiboitic therapy,consult doctor,medication
+Hepatitis B,consult nearest hospital,vaccination,eat healthy,medication
+Fungal infection,bath twice,use detol or neem in bathing water,keep infected area dry,use clean cloths
+Hepatitis C,Consult nearest hospital,vaccination,eat healthy,medication
+Migraine,meditation,reduce stress,use poloroid glasses in sun,consult doctor
+Bronchial Asthma,switch to loose cloothing,take deep breaths,get away from trigger,seek help
+Alcoholic hepatitis,stop alcohol consumption,consult doctor,medication,follow up
+Jaundice,drink plenty of water,consume milk thistle,eat fruits and high fiberous food,medication
+Hepatitis E,stop alcohol consumption,rest,consult doctor,medication
+Dengue,drink papaya leaf juice,avoid fatty spicy food,keep mosquitos away,keep hydrated
+Hepatitis D,consult doctor,medication,eat healthy,follow up
+Heart attack,call ambulance,chew or swallow asprin,keep calm,
+Pneumonia,consult doctor,medication,rest,follow up
+Arthritis,exercise,use hot and cold therapy,try acupuncture,massage
+Gastroenteritis,stop eating solid food for while,try taking small sips of water,rest,ease back into eating
+Tuberculosis,cover mouth,consult doctor,medication,rest
+COVID-19,staying_up_to_date_on_covid_19_vaccine,maintaining_good_indoor_airflow,practicing_physical_distancing,wearing_a_mask_in_the_right_setting
+Influenza,wear_a_protective_mask,wash_hands_frequently,get_enough_rest,avoid_contact_with_others
+Strep Throat,practice_good_hygiene,avoid_close_contact_with_infected_individuals,wash_hands_frequently,avoid_sharing_food_or_drinks
+Lyme Disease,avoid tick bites when outdoors,check for ticks on your body after being in grassy or wooded areas,remove attached ticks promptly and correctly,use insect repellents to prevent tick bites
+Zika Virus,get plenty of rest,drink fluids,treat symptoms with antipyretics and/or analgesics,seek medical care and advice if symptoms worsen
+Cholera,drink safe water,eat food that is cooked and peeled,avoid close contact with people who have cholera,practice good hygiene and wash hands frequently
+Measles,get vaccinated when recommended,avoid close contact with people who have measles,practice good hygiene such as washing hands frequently,seek medical attention immediately if symptoms appear
+Mumps,consume_soft_foods_and_use_paracetamol,avoid_strenuous_physical_activity,apply_warm_or_cold_compresses,drink_plenty_of_fluids
+Rubella,get vaccinated against rubella,isolate people suspected to have rubella,report suspected cases to the local health department,practice good hygiene to prevent the spread of the virus
+Tetanus,get_vaccinated_against_tetanus,seek_medical_attention_immediately_after_an_injury,keep_wounds_clean_and_covered,avoid_close_contact_with_someone_who_has_tetanus
+Rabies,observe_standard_and_respiratory_precautions,wash_wounds_immediately,use_human_rabies_immune_globulin,get_rabies_vaccine
+Anthrax,get_vaccinated_if_at_risk,avoid_close_contact_with_infected_animals,handle_potentially_infected_animal_products_with_care,seek_medical_attention_immediately_if_symptoms_appear
+Dengue Fever,avoid_mosquito_bites,use_insect_repellent,wear_protective_clothing,remove_standing_water
+Yellow Fever,get vaccinated before traveling to risk areas,use mosquito repellent and protective clothing,avoid mosquito bites for up to 5 days after symptoms begin,practice mosquito control programs in affected areas
+Typhoid Fever,practice good hygiene,avoid contaminated food and water,get vaccinated with the typhoid conjugate vaccine,seek medical attention immediately if symptoms occur
+Chikungunya,stay_indoors_to_avoid_mosquito_bites,use_mosquito_netting,drink_plenty_of_liquids,take_acetaminophen_or_paracetamol_to_control_fever
+Ebola,practice_strict_infection_control,avoid_close_contact_with_patients,use_proper_personal_protective_equipment,avoid_direct_contact_with_bodies_of_deceased_persons
+Polio,get_vaccinated,practice_good_hygiene,avoid_close_contact_with_infected_individuals,ensure_proper_waste_disposal
+Leprosy,avoid_close_contact_with_infected_individuals,practice_good_hygiene,seek_medical_attention_immediately_if_symptoms_appear,complete_full_treatment_course_to_prevent_complications
+Syphilis,practice_safe_sex,get_regular_sti_checkups,avoid_close_contact_with_infected_individuals,complete_antibiotic_treatment_if_infected
+Gonorrhea,use condoms during sex,get tested regularly,avoid touching your eyes or mouth after touching your genitals,practice good hygiene
+Chlamydia,use condoms during sex,get tested regularly,avoid unprotected sex,treat the infection with antibiotics if diagnosed
+HIV/AIDS,practice_safe_sex,avoid_sharing_needles,get_regularly_tested,use_protection
+Herpes,practice safe sex,avoid skin-to-skin contact,keep the affected area clean,manage stress to reduce outbreak triggers
+Meningitis,get_vaccinated,seek_medical_attention_immediately,practice_good_hygiene,avoid_close_contact_with_infected_individuals
+Encephalitis,seek medical attention promptly if symptoms occur,get vaccinated against diseases that can cause encephalitis,use protective measures to prevent insect bites that can transmit the disease,follow a healthy lifestyle to boost the immune system
+Sepsis,practicing_good_hygiene,keeping_cuts_and_wounds_clean,getting_routine_medical_care_for_chronic_conditions,getting_medical_attention_immediately_if_you_think_you_have_an_infection
+Rheumatic Fever,see_a_doctor_if_symptoms_of_strep_throat_occur,get_proper_treatment_for_strep_throat,take_medicines_to_kill_strep_bacteria,follow_up_with_a_doctor_to_prevent_complications
+Scarlet Fever,avoid_contact_with_infected_people,practice_good_hygiene,cover_mouth_and_nose_when_coughing,seek_medical_attention_if_symptoms_persist
+Whooping Cough,get_vaccinated,practice_good_hygiene,avoid_close_contact_with_infected_individuals,seek_medical_attention_immediately_if_symptoms_persist
+Diphtheria,get_vaccinated,avoid_close_contact_with_infected_people,practice_good_hygiene,seek_medical_attention_immediately_if_symptoms_occur
+Botulism,Seek medical attention immediately if symptoms occur,Avoid eating food from damaged or swollen cans,Keep infants away from honey and corn syrup,Wash hands thoroughly before handling food
+Toxoplasmosis,avoid undercooked meat,wash hands after handling cat feces,avoid drinking untreated water,practice good hygiene during pregnancy
+Giardiasis,practice good hygiene,avoid contaminated water and food,wash hands regularly,avoid close contact with infected individuals
+Amebiasis,avoid_contaminated_food_and_water,practice_good_hygiene,avoid_travel_to_areas_with_poor_sanitation,take_medication_as_prescribed
+Schistosomiasis,avoid_swimming_in_contaminated_water,wear_protective_clothing,use_safe_water_for_drinking_and_cooking,get_regular_medical_checkups
+Leishmaniasis,wearing_insect_repellent,wearing_protective_clothing,putting_fine_mesh_netting_around_the_bed,screening_windows
+Chagas Disease,avoid_close_contact_with_kissing_bugs,use_insecticides_to_control_kissing_bug_populations,wear_protective_clothing_when_outdoors,use_screened_windows_and_doors_to_prevent_kissing_bug_entry
+Sleeping Sickness,avoid_tsetse_fly_bites,use_insect_repellent,wear_protective_clothing,seek_medical_attention_immediately_if_symptoms_occur
+Scabies,avoid_skin_to_skin_contact,treat_infestations_promptly,wash_clothing_and_bedding,use_creams_or_oral_medications_as_directed
+Ringworm,wear_loose_fitting_clothing,keep_skin_clean_and_dry,avoid_sharing_personal_items,treat_affected_areas_with_anti_fungal_medication
+Candidiasis,maintaining_good_physical_and_oral_hygiene,managing_stress,reducing_refined_carbohydrates_and_sugar,talking_with_your_healthcare_provider_about_medications
+Tinea,practice_good_personal_hygiene,avoid_wearing_tight_clothing,wear_clean_socks_and_underwear,avoid_sharing_towels_or_clothing
+Aspergillosis,avoid exposure to mold spores,wear a mask when working with soil or plants,keep your home clean and dry,avoid close contact with people who have weakened immune systems
