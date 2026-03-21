@@ -10,6 +10,7 @@ from agent_4_updater import MedicalUpdaterAgent
 from agent_5_pure_llm import PureLLMAgent
 from agent_6_combiner import ConsensusSynthesizerAgent
 from agent_7_translator import TranslationAgent
+from agent_8_followup import FollowupAgent
 
 app = FastAPI(title="Medical Agent Workflow API")
 
@@ -22,8 +23,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+class UserData(BaseModel):
+    age: str
+    gender: str
+    location: str
+    medical_history: str
+
 class ChatRequest(BaseModel):
     user_input: str
+    user_data: UserData | None = None
+    chat_history: list[dict] | None = []
 
 class UpdateRequest(BaseModel):
     disease_name: str
@@ -38,6 +47,7 @@ class APIController:
         self.agent_5 = PureLLMAgent()
         self.agent_6 = ConsensusSynthesizerAgent()
         self.translator = TranslationAgent()
+        self.agent_8 = FollowupAgent()
         
         self.description_dict = {}
         self.precaution_dict = {}
@@ -66,9 +76,17 @@ controller = APIController()
 @app.post("/chat")
 async def process_chat(request: ChatRequest):
     user_input = request.user_input
+    user_metadata = request.user_data
+    chat_history = request.chat_history or []
 
-    # Step 1: Extract Symptoms
-    extracted_symptoms = controller.agent_1.extract_symptoms(user_input)
+    # Step 1: Extract Symptoms from current input and history
+    context_prefix = ""
+    if user_metadata:
+        context_prefix = f"[User Profile: {user_metadata.age}yo {user_metadata.gender}, Location: {user_metadata.location}, History: {user_metadata.medical_history}]\n"
+    
+    # We pass the history so Agent 1 can see previous symptoms/confirmations
+    extracted_symptoms = controller.agent_1.extract_symptoms(user_input, chat_history=chat_history)
+    
     if not extracted_symptoms:
         response_data = {
             "type": "clarification",
@@ -81,8 +99,8 @@ async def process_chat(request: ChatRequest):
     is_emergency, risk_score = controller.agent_3.evaluate_risk(extracted_symptoms)
     if is_emergency:
         db_predictions = controller.agent_2.retrieve_disease(extracted_symptoms, top_k=3)
-        llm_predictions = controller.agent_5.predict(extracted_symptoms)
-        consensus = controller.agent_6.synthesize(extracted_symptoms, db_predictions, llm_predictions)
+        llm_predictions = controller.agent_5.predict(extracted_symptoms, patient_info=context_prefix)
+        consensus = controller.agent_6.synthesize(extracted_symptoms, db_predictions, llm_predictions, patient_info=context_prefix)
         
         response_data = {
             "type": "alert",
@@ -94,12 +112,28 @@ async def process_chat(request: ChatRequest):
         }
         return controller.translator.translate_response(user_input, response_data)
 
-    # Step 3: Multi-Agent Diagnostic Consensus
+    # Step 3: Multi-Agent Diagnostic Consensus (Iterative)
     db_predictions = controller.agent_2.retrieve_disease(extracted_symptoms, top_k=3)
-    llm_predictions = controller.agent_5.predict(extracted_symptoms)
-    consensus = controller.agent_6.synthesize(extracted_symptoms, db_predictions, llm_predictions)
+    llm_predictions = controller.agent_5.predict(extracted_symptoms, patient_info=context_prefix)
+    consensus = controller.agent_6.synthesize(extracted_symptoms, db_predictions, llm_predictions, patient_info=context_prefix)
     
     final_rankings = consensus["final_rankings"]
+    status = consensus["status"]
+
+    # Generate follow-up questions
+    followups = controller.agent_8.generate_questions(extracted_symptoms, final_rankings, patient_info=context_prefix)
+
+    # If the synthesizer says we need more info, or if we have very high ambiguity
+    if status == "IN_PROGRESS" and len(chat_history) < 6: # Limit to ~3 turns to avoid infinite loops
+        response_data = {
+            "type": "clarification",
+            "message": consensus["reasoning"],
+            "followup_questions": followups,
+            "symptoms_identified": extracted_symptoms
+        }
+        return controller.translator.translate_response(user_input, response_data)
+
+    # Final Diagnosis reached
     if final_rankings:
         primary_disease = final_rankings[0]
         desc = controller.description_dict.get(primary_disease, "Description not currently available.")
@@ -111,6 +145,7 @@ async def process_chat(request: ChatRequest):
             "reasoning": consensus["reasoning"],
             "description": desc,
             "precautions": [p for p in prec if p.strip()],
+            "followup_questions": followups,
             "risk_score": risk_score,
             "symptoms_identified": extracted_symptoms
         }

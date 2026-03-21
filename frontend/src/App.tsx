@@ -13,12 +13,29 @@ interface Message {
   riskScore?: number;
 }
 
+type OnboardingStep = 'AGE' | 'GENDER' | 'LOCATION' | 'HISTORY' | 'SYMPTOMS';
+
+interface UserData {
+  age: string;
+  gender: string;
+  location: string;
+  medical_history: string;
+}
+
 function App() {
+  const [step, setStep] = useState<OnboardingStep>('AGE');
+  const [userData, setUserData] = useState<UserData>({
+    age: '',
+    gender: '',
+    location: '',
+    medical_history: ''
+  });
+
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "init",
       sender: "bot",
-      text: "Hello! I am your AI Medical Assistant. Please describe your symptoms in your own words, or type '/update DiseaseName' to teach me a new disease.",
+      text: "Welcome to Medisense. To provide a high-precision analysis, I need a few details first. What is your age?",
       type: "clarification"
     }
   ]);
@@ -34,19 +51,48 @@ function App() {
     e?.preventDefault();
     if (!input.trim()) return;
 
+    const userText = input.trim();
     const userMsg: Message = {
       id: Date.now().toString(),
       sender: "user",
-      text: input
+      text: userText
     };
 
     setMessages(prev => [...prev, userMsg]);
     setInput("");
+
+    // Handle Onboarding Steps
+    if (step === 'AGE') {
+      setUserData(prev => ({ ...prev, age: userText }));
+      setStep('GENDER');
+      setMessages(prev => [...prev, { id: Date.now().toString() + "bot", sender: "bot", text: "Got it. What is your gender?", type: "clarification" }]);
+      return;
+    }
+    if (step === 'GENDER') {
+      setUserData(prev => ({ ...prev, gender: userText }));
+      setStep('LOCATION');
+      setMessages(prev => [...prev, { id: Date.now().toString() + "bot", sender: "bot", text: "Thank you. Where are you currently located?", type: "clarification" }]);
+      return;
+    }
+    if (step === 'LOCATION') {
+      setUserData(prev => ({ ...prev, location: userText }));
+      setStep('HISTORY');
+      setMessages(prev => [...prev, { id: Date.now().toString() + "bot", sender: "bot", text: "Nearly there. Do you have any existing medical conditions or history I should know about? (Type 'None' if not)", type: "clarification" }]);
+      return;
+    }
+    if (step === 'HISTORY') {
+      setUserData(prev => ({ ...prev, medical_history: userText }));
+      setStep('SYMPTOMS');
+      setMessages(prev => [...prev, { id: Date.now().toString() + "bot", sender: "bot", text: "Profile updated. Now, please describe the symptoms you are currently experiencing.", type: "clarification" }]);
+      return;
+    }
+
+    // Normal Symptom Processing
     setLoading(true);
 
     try {
-      if (input.trim().toLowerCase().startsWith('/update ')) {
-        const disease = input.slice(8).trim();
+      if (userText.toLowerCase().startsWith('/update ')) {
+        const disease = userText.slice(8).trim();
         const res = await fetch("http://localhost:8000/update_disease", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -60,17 +106,35 @@ function App() {
           type: "update"
         }]);
       } else {
+        // Filter out onboarding messages from the chat_history sent to the diagnosis backend
+        // We only want the symptom-related turns
+        const chatHistoryForBackend = messages
+          .filter(m => m.id !== 'init' && !['AGE', 'GENDER', 'LOCATION', 'HISTORY'].includes(m.id))
+          .map(m => ({
+            role: m.sender === 'user' ? 'user' : 'assistant',
+            content: m.text
+          }));
+
         const res = await fetch("http://localhost:8000/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ user_input: userMsg.text })
+          body: JSON.stringify({ 
+            user_input: userText,
+            user_data: userData,
+            chat_history: chatHistoryForBackend
+          })
         });
         const data = await res.json();
         
+        let botText = data.message;
+        if (data.type === 'clarification' && data.followup_questions && data.followup_questions.length > 0) {
+          botText += "\n\nFollow-up Questions:\n" + data.followup_questions.map((q: string, i: number) => `${i+1}. ${q}`).join("\n");
+        }
+
         setMessages(prev => [...prev, {
           id: Date.now().toString() + "bot",
           sender: "bot",
-          text: data.message || "Something went wrong.",
+          text: botText,
           type: data.type,
           disease: data.disease,
           diseases: data.diseases,

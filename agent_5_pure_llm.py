@@ -10,24 +10,26 @@ class PureLLMAgent:
         self.client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
         self.model = model
 
-    def predict(self, symptoms: list[str]) -> list[str]:
+    def predict(self, symptoms: list[str], patient_info: str = "") -> list[str]:
         symptoms_str = ", ".join(symptoms)
         
         system_prompt = """
         You are a world-class Pure LLM Diagnostician. You rely entirely on your vast internal pre-trained medical knowledge.
-        Given a list of patient symptoms, predict the top 3 most likely medical conditions.
+        Given a list of patient symptoms and their basic profile, predict the top 3 most likely medical conditions.
         Output ONLY valid JSON in this exact format, with no conversational filler or markdown blocks:
         {
             "diseases": ["Disease Name 1", "Disease Name 2", "Disease Name 3"]
         }
         """
         
+        user_prompt = f"Patient Profile: {patient_info}\nSymptoms: {symptoms_str}"
+        
         try:
             completion = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Symptoms: {symptoms_str}"}
+                    {"role": "user", "content": user_prompt}
                 ],
                 temperature=0.2
             )

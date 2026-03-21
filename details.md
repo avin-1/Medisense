@@ -30,5 +30,9 @@ This document outlines the specialized AI agents that power the Medisense intell
 - **Main Work**: Multilingual Support.
 - **Details**: Automatically detects the language of the user's input. It translates all final outputs (messages, descriptions, reasoning, and precautions) back into the user's native language (e.g., Hindi) to ensure accessibility.
 
+## 8. Follow-up Agent (`agent_8_followup.py`)
+- **Main Work**: Diagnostic Refinement.
+- **Details**: Generates 2-3 targeted, clinical follow-up questions based on the extracted symptoms and potential diseases. This helps guide the patient to provide more detail for a more accurate future diagnosis.
+
 ---
 **Core LLM**: All reasoning tasks currently utilize **openai/gpt-oss-120b** for high-precision clinical analysis.
