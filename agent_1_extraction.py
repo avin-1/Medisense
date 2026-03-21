@@ -7,7 +7,7 @@ from groq import Groq
 load_dotenv()
 
 class ClinicalIntakeAgent:
-    def __init__(self, data_path='Data/Training.csv', model="llama-3.3-70b-versatile"):
+    def __init__(self, data_path='Data/Training.csv', model="openai/gpt-oss-120b"):
         # We read the training CSV solely to get the exact list of valid symptoms
         df = pd.read_csv(data_path)
         self.valid_symptoms = list(df.columns[:-1])

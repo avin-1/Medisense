@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class PureLLMAgent:
-    def __init__(self, model="llama-3.3-70b-versatile"):
+    def __init__(self, model="openai/gpt-oss-120b"):
         self.client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
         self.model = model
 

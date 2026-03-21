@@ -9,6 +9,7 @@ from agent_3_triage import TriageAgent
 from agent_4_updater import MedicalUpdaterAgent
 from agent_5_pure_llm import PureLLMAgent
 from agent_6_combiner import ConsensusSynthesizerAgent
+from agent_7_translator import TranslationAgent
 
 app = FastAPI(title="Medical Agent Workflow API")
 
@@ -36,6 +37,7 @@ class APIController:
         self.agent_4 = MedicalUpdaterAgent()
         self.agent_5 = PureLLMAgent()
         self.agent_6 = ConsensusSynthesizerAgent()
+        self.translator = TranslationAgent()
         
         self.description_dict = {}
         self.precaution_dict = {}
@@ -68,11 +70,12 @@ async def process_chat(request: ChatRequest):
     # Step 1: Extract Symptoms
     extracted_symptoms = controller.agent_1.extract_symptoms(user_input)
     if not extracted_symptoms:
-        return {
+        response_data = {
             "type": "clarification",
             "message": "I couldn't clearly identify any medical symptoms from that. Could you describe them differently?",
             "symptoms_identified": []
         }
+        return controller.translator.translate_response(user_input, response_data)
 
     # Step 2: Risk Evaluation (Triage)
     is_emergency, risk_score = controller.agent_3.evaluate_risk(extracted_symptoms)
@@ -81,7 +84,7 @@ async def process_chat(request: ChatRequest):
         llm_predictions = controller.agent_5.predict(extracted_symptoms)
         consensus = controller.agent_6.synthesize(extracted_symptoms, db_predictions, llm_predictions)
         
-        return {
+        response_data = {
             "type": "alert",
             "message": f"EMERGENCY ALERT! Your symptoms calculate to a critical risk score ({risk_score}). Halting normal flow. Please seek immediate medical consultation or visit the ER.",
             "diseases": consensus["final_rankings"],
@@ -89,6 +92,7 @@ async def process_chat(request: ChatRequest):
             "risk_score": risk_score,
             "symptoms_identified": extracted_symptoms
         }
+        return controller.translator.translate_response(user_input, response_data)
 
     # Step 3: Multi-Agent Diagnostic Consensus
     db_predictions = controller.agent_2.retrieve_disease(extracted_symptoms, top_k=3)
@@ -100,7 +104,7 @@ async def process_chat(request: ChatRequest):
         primary_disease = final_rankings[0]
         desc = controller.description_dict.get(primary_disease, "Description not currently available.")
         prec = controller.precaution_dict.get(primary_disease, [])
-        return {
+        response_data = {
             "type": "diagnosis",
             "message": f"Based on the analysis, you may have **{primary_disease}**.\n\n{desc}",
             "diseases": final_rankings,
@@ -110,12 +114,14 @@ async def process_chat(request: ChatRequest):
             "risk_score": risk_score,
             "symptoms_identified": extracted_symptoms
         }
+        return controller.translator.translate_response(user_input, response_data)
     else:
-        return {
+        response_data = {
             "type": "error",
             "message": "Could not match your symptoms to a specific disease.",
             "symptoms_identified": extracted_symptoms
         }
+        return controller.translator.translate_response(user_input, response_data)
 
 @app.post("/update_disease")
 async def update_disease(request: UpdateRequest):

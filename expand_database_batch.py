@@ -14,7 +14,7 @@ class BatchDatabaseExpander:
     def __init__(self, db_path="./chroma_db"):
         self.tavily_client = TavilyClient(api_key=os.environ.get("TAVILY_API_KEY"))
         self.groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
-        self.structurer_model = "llama-3.3-70b-versatile"
+        self.structurer_model = "openai/gpt-oss-120b"
         
         # Setup Chroma
         self.db_client = chromadb.PersistentClient(path=db_path)
