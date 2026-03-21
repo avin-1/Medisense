@@ -10,7 +10,7 @@ class FollowupAgent:
         self.client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
         self.model = model
 
-    def generate_questions(self, extracted_symptoms: list[str], potential_diseases: list[str], patient_info: str = "") -> list[str]:
+    def generate_questions(self, extracted_symptoms: list[str], potential_diseases: list[str], patient_info: str = "", missing_info: list[str] = [], chat_history: list[dict] = []) -> list[str]:
         """
         Generates 2-3 follow-up questions to clarify symptoms or differentiate between diseases.
         """
@@ -19,18 +19,22 @@ class FollowupAgent:
 
         system_prompt = """
         You are an expert Clinical Interviewer AI. 
-        Your goal is to ask 2-3 highly targeted, professional follow-up questions to a patient.
-        These questions should help differentiate between the 'Potential Diseases' based on the 'Extracted Symptoms' and the 'Patient Profile'.
-        Focus on:
-        1. Duration of symptoms.
-        2. Severity or specific characteristics (e.g., type of cough, exact location of pain).
-        3. Presence or absence of key differentiating symptoms related to their medical history or location.
+        Your goal is to ask EXACTLY ONE highly targeted, professional follow-up question to a patient.
+        This question must maximize "Information Gain" to help differentiate between the current hypotheses.
         
-        Output ONLY a RAW JSON array of 2-3 strings (the questions). Do not include markdown or conversational filler.
-        Example: ["How many days have you had this fever?", "Is your cough dry or productive?"]
+        CRITICAL: Review the "Conversation History" provided. NEVER ask a question that has already been asked or addressed in the history. Focus on PROGRESSION.
+        
+        Focus on:
+        1. Missing information identified by the Chief Medical Officer.
+        2. Ruling out high-risk "Red Flag" conditions.
+        3. Differentiating between two similar candidate diseases.
+        
+        Output ONLY a RAW JSON array containing EXACTLY ONE string (the question).
+        Example: ["Does the pain radiate to your left arm or jaw?"]
         """
         
-        user_prompt = f"Patient Profile: {patient_info}\nExtracted Symptoms: {', '.join(extracted_symptoms)}\nPotential Diseases: {', '.join(potential_diseases)}"
+        history_summary = "\n".join([f"{m['role']}: {m['content']}" for m in chat_history])
+        user_prompt = f"Conversation History:\n{history_summary}\n\nPatient Profile: {patient_info}\nExtracted Symptoms: {', '.join(extracted_symptoms)}\nMissing Info Needed: {', '.join(missing_info)}\nTop Hypotheses: {potential_diseases}"
         
         try:
             completion = self.client.chat.completions.create(

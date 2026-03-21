@@ -1,6 +1,12 @@
 import { useState, useRef, useEffect } from 'react'
 import './index.css'
 
+interface Hypothesis {
+  disease: string;
+  confidence: number;
+  reasoning: string;
+}
+
 interface Message {
   id: string;
   sender: 'user' | 'bot';
@@ -8,9 +14,11 @@ interface Message {
   type?: 'diagnosis' | 'alert' | 'clarification' | 'error' | 'update';
   disease?: string;
   diseases?: string[];
+  hypotheses?: Hypothesis[];
   reasoning?: string;
   precautions?: string[];
   riskScore?: number;
+  urgency?: string;
 }
 
 type OnboardingStep = 'AGE' | 'GENDER' | 'LOCATION' | 'HISTORY' | 'SYMPTOMS';
@@ -106,14 +114,21 @@ function App() {
           type: "update"
         }]);
       } else {
-        // Filter out onboarding messages from the chat_history sent to the diagnosis backend
-        // We only want the symptom-related turns
-        const chatHistoryForBackend = messages
-          .filter(m => m.id !== 'init' && !['AGE', 'GENDER', 'LOCATION', 'HISTORY'].includes(m.id))
-          .map(m => ({
-            role: m.sender === 'user' ? 'user' : 'assistant',
-            content: m.text
-          }));
+        // Filter out specific onboarding bot messages and start from when symptoms begin
+        const symptomMessages = messages.filter(m => {
+          // If it's a bot message, we only want it if it's NOT an onboarding prompt
+          if (m.sender === 'bot') {
+            return !['Welcome to Medisense.', 'Got it. What is your gender?', 'Thank you. Where are you currently located?', 'Nearly there. Do you have any existing medical conditions', 'Profile updated. Now, please describe'].some(t => m.text.includes(t));
+          }
+          // If it's a user message, we only want it if it was sent AFTER the onboarding HISTORY step
+          // Since messages are in order, we can filter by type or content
+          return true; 
+        });
+
+        const chatHistoryForBackend = symptomMessages.map(m => ({
+          role: m.sender === 'user' ? 'user' : 'assistant',
+          content: m.text
+        }));
 
         const res = await fetch("http://localhost:8000/chat", {
           method: "POST",
@@ -138,9 +153,11 @@ function App() {
           type: data.type,
           disease: data.disease,
           diseases: data.diseases,
+          hypotheses: data.hypotheses,
           reasoning: data.reasoning,
           precautions: data.precautions,
-          riskScore: data.risk_score
+          riskScore: data.risk_score,
+          urgency: data.urgency
         }]);
       }
     } catch (error) {
@@ -167,39 +184,44 @@ function App() {
             <div key={msg.id} className={`message-bubble ${msg.sender} ${msg.type === 'alert' ? 'alert-bubble' : ''}`}>
               <div className="message-content">
                 <p>{msg.text}</p>
-                {msg.type === 'diagnosis' && msg.diseases && msg.diseases.length > 0 && (
+                {msg.type === 'diagnosis' && msg.hypotheses && msg.hypotheses.length > 0 && (
                   <div className="precautions-card" style={{marginTop: '12px'}}>
-                    <h4>Ranked Possibilities:</h4>
-                    <ol style={{ margin: 0, paddingLeft: '20px', color: '#cbd5e1' }}>
-                      {msg.diseases.map((d, i) => <li key={i} style={{marginBottom: '4px'}}>{d}</li>)}
-                    </ol>
+                    <h4>Clinical Hypotheses:</h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {msg.hypotheses.map((h, i) => (
+                        <div key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '6px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', color: '#f8fafc' }}>
+                            <strong>{h.disease}</strong>
+                            <span style={{ color: h.confidence > 70 ? '#4ade80' : '#fbbf24' }}>{h.confidence}%</span>
+                          </div>
+                          <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: '#94a3b8' }}>{h.reasoning}</p>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
-                {msg.reasoning && (
-                  <div className="precautions-card" style={{marginTop: '12px', background: 'rgba(59, 130, 246, 0.1)', borderColor: 'rgba(59, 130, 246, 0.3)'}}>
-                    <h4 style={{color: '#93c5fd', borderBottom: '1px solid rgba(59, 130, 246, 0.2)', paddingBottom: '6px', marginBottom: '8px'}}>Chief Medical Synthesizer Logic:</h4>
-                    <p style={{margin: '0', fontSize: '0.9rem', color: '#bfdbfe', lineHeight: 1.6}}>{msg.reasoning}</p>
-                  </div>
+                {msg.type === 'diagnosis' && msg.urgency && (
+                   <div style={{ marginTop: '12px' }}>
+                     <div className="risk-indicator" style={{ 
+                       background: msg.urgency.includes('Immediate') ? 'rgba(239, 68, 68, 0.3)' : 'rgba(59, 130, 246, 0.3)',
+                       color: 'white',
+                       fontWeight: 'bold',
+                       textAlign: 'center'
+                     }}>
+                       Recommended Urgency: {msg.urgency}
+                     </div>
+                   </div>
                 )}
-                {msg.type === 'diagnosis' && msg.precautions && msg.precautions.length > 0 && (
-                  <div className="precautions-card">
-                    <h4>Preventative Measures:</h4>
-                    <ul>
-                      {msg.precautions.map((p, i) => <li key={i}>{p}</li>)}
-                    </ul>
-                  </div>
-                )}
-                {msg.type === 'alert' && (
-                  <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-start' }}>
-                    {msg.riskScore && <div className="risk-indicator" style={{margin: 0}}>Critical Triage Score: {msg.riskScore}</div>}
-                    {msg.diseases && msg.diseases.length > 0 && (
-                      <div className="risk-indicator" style={{margin: 0, background: 'rgba(255,255,255,0.2)', textAlign: 'left'}}>
-                        <div style={{marginBottom: '4px'}}><strong>Possible Conditions:</strong></div>
-                        <ol style={{ margin: '0 0 0 20px', padding: 0 }}>
-                          {msg.diseases.map((d, i) => <li key={i}>{d}</li>)}
-                        </ol>
-                      </div>
-                    )}
+                {msg.type === 'clarification' && msg.hypotheses && msg.hypotheses.length > 0 && (
+                  <div className="precautions-card" style={{marginTop: '12px', background: 'rgba(255, 255, 255, 0.05)'}}>
+                    <h5 style={{margin: '0 0 8px', color: '#94a3b8', fontSize: '0.8rem', textTransform: 'uppercase'}}>Current Differential:</h5>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      {msg.hypotheses.map((h, i) => (
+                        <span key={i} style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: '12px', fontSize: '0.8rem', color: '#cbd5e1' }}>
+                          {h.disease} ({h.confidence}%)
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>

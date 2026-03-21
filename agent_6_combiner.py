@@ -16,24 +16,29 @@ class ConsensusSynthesizerAgent:
         llm_str = ", ".join(llm_predictions) if llm_predictions else "None"
         
         system_prompt = """
-        You are the Chief Medical Synthesizer.
+        Your goal is to iteratively reduce diagnostic uncertainty by managing a set of clinical hypotheses.
+        
         You are given:
         1. A patient's profile (age, gender, location, history).
-        2. A patient's extracted symptoms.
-        3. A list of predicted diseases from a local Vector database (RAG).
-        4. A list of predicted diseases from a Pure LLM Diagnostician.
+        2. A patient's extracted symptoms (from the full conversational history).
+        3. Predicted diseases from a Vector DB and a Pure LLM.
         
-        Your job is to safely cross-verify these two lists, analyze the symptoms in the context of the patient's profile, resolve any discrepancies, and synthesize a final ordered list of the top 3 most probable conditions.
-        
-        Decision Logic:
-        - If the symptoms are specific and the predictions are consistent, set "status": "FINAL".
-        - If the symptoms are vague, or there is high conflict between DB and LLM predictions, set "status": "IN_PROGRESS". This signals that more follow-up questions are needed.
+        Follow this strict protocol:
+        - Maintain top 3-5 hypotheses (candidate diseases).
+        - Assign a confidence score (%) to each.
+        - Decide between "status": "IN_PROGRESS" or "status": "FINAL".
+        - Use "IN_PROGRESS" if no disease has >80% confidence and more info can be gained.
+        - Specifically identify what information is missing to rule in/out the current hypotheses.
         
         Output ONLY valid JSON structure:
         {
             "status": "FINAL" or "IN_PROGRESS",
-            "final_rankings": ["Disease1", "Disease2", "Disease3"],
-            "reasoning": "A concise paragraph explaining why these diseases were chosen or why more info is needed."
+            "hypotheses": [
+                {"disease": "Name", "confidence": 85, "reasoning": "Why?"},
+                {"disease": "Alternative", "confidence": 10, "reasoning": "Why?"}
+            ],
+            "overall_reasoning": "Concise medical logic for the current state.",
+            "missing_info": ["Specific symptom or characteristic needed to differentiate"]
         }
         Do not output markdown code blocks.
         """
@@ -65,15 +70,18 @@ class ConsensusSynthesizerAgent:
             data = json.loads(content)
             return {
                 "status": data.get("status", "FINAL"),
-                "final_rankings": data.get("final_rankings", []),
-                "reasoning": data.get("reasoning", "Synthesizer logic failed to extract reasoning.")
+                "hypotheses": data.get("hypotheses", []),
+                "overall_reasoning": data.get("overall_reasoning", ""),
+                "missing_info": data.get("missing_info", [])
             }
             
         except Exception as e:
             print(f"Error in Agent 6 (Synthesizer): {e}")
             # Fallback
+            fallback_hypotheses = [{"disease": d, "confidence": 33 if i < 3 else 0, "reasoning": "DB prediction"} for i, d in enumerate(db_predictions)]
             return {
                 "status": "FINAL",
-                "final_rankings": db_predictions,
-                "reasoning": "Fallback to database due to synthesizer error."
+                "hypotheses": fallback_hypotheses,
+                "overall_reasoning": "Fallback to database due to synthesizer error.",
+                "missing_info": []
             }

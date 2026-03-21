@@ -117,43 +117,53 @@ async def process_chat(request: ChatRequest):
     llm_predictions = controller.agent_5.predict(extracted_symptoms, patient_info=context_prefix)
     consensus = controller.agent_6.synthesize(extracted_symptoms, db_predictions, llm_predictions, patient_info=context_prefix)
     
-    final_rankings = consensus["final_rankings"]
+    hypotheses = consensus["hypotheses"]
     status = consensus["status"]
+    missing_info = consensus["missing_info"]
+    top_rankings = [h["disease"] for h in hypotheses]
 
-    # Generate follow-up questions
-    followups = controller.agent_8.generate_questions(extracted_symptoms, final_rankings, patient_info=context_prefix)
+    # Generate EXACTLY ONE follow-up question
+    followups = controller.agent_8.generate_questions(extracted_symptoms, top_rankings, patient_info=context_prefix, missing_info=missing_info, chat_history=chat_history)
 
-    # If the synthesizer says we need more info, or if we have very high ambiguity
-    if status == "IN_PROGRESS" and len(chat_history) < 6: # Limit to ~3 turns to avoid infinite loops
+    # If the synthesizer says we need more info (IN_PROGRESS)
+    if status == "IN_PROGRESS" and len(chat_history) < 14: # Allow ~7 full exchanges
         response_data = {
             "type": "clarification",
-            "message": consensus["reasoning"],
-            "followup_questions": followups,
+            "message": consensus["overall_reasoning"],
+            "followup_questions": followups[:1], # Strictly enforce ONE question
+            "hypotheses": hypotheses,
             "symptoms_identified": extracted_symptoms
         }
         return controller.translator.translate_response(user_input, response_data)
 
-    # Final Diagnosis reached
-    if final_rankings:
-        primary_disease = final_rankings[0]
-        desc = controller.description_dict.get(primary_disease, "Description not currently available.")
+    # Final Diagnosis reached (or limit reached)
+    if hypotheses:
+        primary_h = hypotheses[0]
+        primary_disease = primary_h["disease"]
+        desc = controller.description_dict.get(primary_disease, "Detailed description not currently available.")
         prec = controller.precaution_dict.get(primary_disease, [])
+        
+        # Calculate urgency based on risk score + medical context
+        urgency = "Normal"
+        if risk_score > 7: urgency = "Immediate (Emergency)"
+        elif risk_score > 4: urgency = "Urgent (24-48 hours)"
+
         response_data = {
             "type": "diagnosis",
-            "message": f"Based on the analysis, you may have **{primary_disease}**.\n\n{desc}",
-            "diseases": final_rankings,
-            "reasoning": consensus["reasoning"],
+            "message": f"Based on our clinical interview, the most likely diagnosis is **{primary_disease}** (Confidence: {primary_h['confidence']}%).\n\n{desc}",
+            "diseases": [h["disease"] for h in hypotheses],
+            "hypotheses": hypotheses,
+            "reasoning": consensus["overall_reasoning"],
             "description": desc,
             "precautions": [p for p in prec if p.strip()],
-            "followup_questions": followups,
-            "risk_score": risk_score,
+            "urgency": urgency,
             "symptoms_identified": extracted_symptoms
         }
         return controller.translator.translate_response(user_input, response_data)
     else:
         response_data = {
             "type": "error",
-            "message": "Could not match your symptoms to a specific disease.",
+            "message": "Clinical consensus could not be reached with the current information.",
             "symptoms_identified": extracted_symptoms
         }
         return controller.translator.translate_response(user_input, response_data)
