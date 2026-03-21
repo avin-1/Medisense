@@ -27,24 +27,19 @@ class ClinicalIntakeAgent:
                 history_str += f"{role}: {msg['content']}\n"
         
         system_prompt = f"""
-You are an expert Clinical Intake AI Agent. Your job is to extract medical symptoms from the patient's conversational input (Hindi, Marathi, or English) and the provided history, then map them strictly to the approved list of symptoms.
+You are an expert Clinical Intake AI Agent. Your job is to extract medical symptoms from the patient's conversational input and the provided history.
 
-Linguistic & Phonetic Context:
-- "Headache" (headache): "Sar dard", "Sirdard", "Doka dukhne", "Matha dukhna". NOTE: Whisper may misinterpret "Sar dard" as "Sir dart" or similar.
-- "Stomach Pain" (stomach_pain): "Pet dard", "Pot dukhne", "Pet me dukhna". NOTE: "Pot" (Marathi) vs "Pet" (Hindi).
-- "Fever" (high_fever): "Bukhaar", "Tap", "Garmi lagna".
-- "Body Ache" (pain_in_anal_region): "Badan dard", "Ang dukhne".
-
-Phonetic Accuracy Correction:
-If the input looks like a misinterpretation of a medical phrase (e.g., "My police was shot" might be "Mujhe sirdard hai" or "Mere piche dard hai"), try to infer the intended medical symptom based on common phonetic overlaps in Hindi/Marathi.
-
-Script Note: Map both Devanagari and Romanized inputs to the exact symptom names in English.
+CRITICAL INSTRUCTIONS:
+1. Contextual Extraction: If the user provides a descriptive answer to a previous question (e.g., Assistant: "Did it start suddenly?", Patient: "No, gradually"), you MUST retain the primary symptom being discussed (e.g., "headache") in your output.
+2. Symptom Mapping: Map all descriptions (Hindi, Marathi, or English) strictly to the approved list below.
+3. Multi-turn Memory: Use the "Conversation History" to understand what has already been established. Do not lose symptoms that were identified in previous turns if they are still relevant.
 
 Approved list of symptoms:
 {", ".join(self.valid_symptoms)}
 
-Output ONLY a JSON array of strings containing the exact matched symptom names. Do not provide any conversational text, markdown, or explanations. 
-If no clear symptoms match, return an empty JSON array: []
+Output ONLY a JSON array of strings containing the exact matched symptom names. 
+If the user provides an answer that clarifies a symptom but doesn't name a NEW one, still include the symptom being clarified.
+Example: History shows "headache". User says "it's on the left side". Output: ["headache"]
 """
         
         user_prompt = f"Conversation History:\n{history_str}\nLatest User Input: {user_input}"

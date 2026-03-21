@@ -10,19 +10,37 @@ class PureLLMAgent:
         self.client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
         self.model = model
 
-    def predict(self, symptoms: list[str], patient_info: str = "") -> list[str]:
+    def predict(self, symptoms: list[str], patient_info: str = "", chat_history: list[dict] = []) -> list[str]:
         symptoms_str = ", ".join(symptoms)
         
-        system_prompt = """
-        You are a world-class Pure LLM Diagnostician. You rely entirely on your vast internal pre-trained medical knowledge.
-        Given a list of patient symptoms and their basic profile, predict the top 3 most likely medical conditions.
-        Output ONLY valid JSON in this exact format, with no conversational filler or markdown blocks:
-        {
-            "diseases": ["Disease Name 1", "Disease Name 2", "Disease Name 3"]
-        }
-        """
+        # Build conversation history for the LLM 
+        history_lines = []
+        for m in chat_history:
+            role = "Doctor" if m['role'] == 'assistant' else "Patient"
+            history_lines.append(f"{role}: {m['content']}")
+        history_summary = "\n".join(history_lines) if history_lines else "(No conversation history yet)"
+
+        system_prompt = """You are a world-class Pure LLM Diagnostician. You rely entirely on your vast internal pre-trained medical knowledge.
+
+CLINICAL REASONING PROTOCOL:
+1. Read the conversation history carefully for ALL clinical clues (onset, severity, duration, associated symptoms).
+2. Use these clues to select the 3 most likely diseases.
+3. If the patient said "gradual onset" → do NOT include subarachnoid hemorrhage as a top choice.
+4. Be specific. Do not output generic catches like "Other causes".
+
+Output ONLY valid JSON — no markdown fences:
+{
+    "diseases": ["Most Likely Disease", "Second Most Likely", "Third Most Likely"]
+}
+"""
         
-        user_prompt = f"Patient Profile: {patient_info}\nSymptoms: {symptoms_str}"
+        user_prompt = f"""Patient Profile: {patient_info}
+Symptoms Identified: {symptoms_str}
+
+Conversation History:
+{history_summary}
+
+Based on all evidence, predict the top 3 most likely diseases:"""
         
         try:
             completion = self.client.chat.completions.create(

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import ReactMarkdown from 'react-markdown'
 import './index.css'
 
 interface Hypothesis {
@@ -30,7 +31,18 @@ interface UserData {
   medical_history: string;
 }
 
+interface ChatSession {
+  id: string;
+  messages: Message[];
+  userData: UserData;
+  step: OnboardingStep;
+  timestamp: number;
+}
+
 function App() {
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [currentSessionId, setCurrentSessionId] = useState<string>(Date.now().toString());
+  
   const [step, setStep] = useState<OnboardingStep>('AGE');
   const [userData, setUserData] = useState<UserData>({
     age: '',
@@ -43,17 +55,70 @@ function App() {
     {
       id: "init",
       sender: "bot",
-      text: "Welcome to Medisense. To provide a high-precision analysis, I need a few details first. What is your age?",
+      text: "Welcome to Aarogya Doot. To provide a high-precision analysis, I need a few details first. What is your age?",
       type: "clarification"
     }
   ]);
+
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Sync current state to sessions list
+  useEffect(() => {
+    setSessions(prev => {
+        const otherSessions = prev.filter(s => s.id !== currentSessionId);
+        const currentSession: ChatSession = {
+            id: currentSessionId,
+            messages,
+            userData,
+            step,
+            timestamp: Date.now()
+        };
+        return [currentSession, ...otherSessions].sort((a, b) => b.timestamp - a.timestamp);
+    });
+  }, [messages, userData, step, currentSessionId]);
+
+  const startNewChat = () => {
+    const newId = Date.now().toString();
+    setCurrentSessionId(newId);
+    setStep('AGE');
+    setUserData({ age: '', gender: '', location: '', medical_history: '' });
+    setMessages([{
+      id: "init-" + newId,
+      sender: "bot",
+      text: "Welcome to Aarogya Doot. To provide a high-precision analysis, I need a few details first. What is your age?",
+      type: "clarification"
+    }]);
+  };
+
+  const loadSession = (session: ChatSession) => {
+    setCurrentSessionId(session.id);
+    setStep(session.step);
+    setUserData(session.userData);
+    setMessages(session.messages);
+  };
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
+
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // Don't focus if already in an input/textarea or if using special keys
+      const active = document.activeElement?.tagName;
+      if (active === 'INPUT' || active === 'TEXTAREA') return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      
+      // Printable characters move focus to our chat input
+      if (e.key.length === 1 && inputRef.current) {
+        inputRef.current.focus();
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, []);
 
   const [selectedLanguage, setSelectedLanguage] = useState<string>("en");
   const [isRecording, setIsRecording] = useState(false);
@@ -80,7 +145,6 @@ function App() {
       mediaRecorder.start();
       setIsRecording(true);
     } catch (err) {
-      console.error("Recording Error:", err);
       alert("Could not access microphone.");
     }
   };
@@ -96,9 +160,7 @@ function App() {
     setLoading(true);
     const formData = new FormData();
     formData.append("file", blob, "recording.wav");
-    if (selectedLanguage) {
-      formData.append("language", selectedLanguage);
-    }
+    if (selectedLanguage) formData.append("language", selectedLanguage);
 
     try {
       const res = await fetch("http://localhost:8000/transcribe", {
@@ -106,243 +168,298 @@ function App() {
         body: formData
       });
       const data = await res.json();
-      if (data.text) {
-        // Auto-send the transcribed text
-        await processDiagnosticFlow(data.text);
-      }
+      if (data.text) await processDiagnosticFlow(data.text);
     } catch (error) {
       console.error("Transcription Error:", error);
     }
     setLoading(false);
   };
 
-  const handleSend = async (e?: React.FormEvent) => {
-    e?.preventDefault();
-    if (!input.trim()) return;
-    const userText = input.trim();
-    setInput("");
-    await processDiagnosticFlow(userText);
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedImage(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
-  const processDiagnosticFlow = async (text: string) => {
+  const handleSend = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (!input.trim() && !selectedImage) return;
+    const userText = input.trim();
+    const currentImage = selectedImage;
+    
+    setInput("");
+    setSelectedImage(null);
+    setImagePreview(null);
+    
+    await processDiagnosticFlow(userText, currentImage);
+  };
+
+  const processDiagnosticFlow = async (text: string, imageFile?: File | null) => {
     const userMsg: Message = {
       id: Date.now().toString(),
       sender: "user",
-      text: text
+      text: text || "[Symptom Image]"
     };
 
     setMessages(prev => [...prev, userMsg]);
 
-    // Handle Onboarding Steps
-    if (step === 'AGE') {
-      setUserData(prev => ({ ...prev, age: text }));
-      setStep('GENDER');
-      setMessages(prev => [...prev, { id: Date.now().toString() + "bot", sender: "bot", text: "Got it. What is your gender?", type: "clarification" }]);
-      return;
-    }
-    if (step === 'GENDER') {
-      setUserData(prev => ({ ...prev, gender: text }));
-      setStep('LOCATION');
-      setMessages(prev => [...prev, { id: Date.now().toString() + "bot", sender: "bot", text: "Thank you. Where are you currently located?", type: "clarification" }]);
-      return;
-    }
-    if (step === 'LOCATION') {
-      setUserData(prev => ({ ...prev, location: text }));
-      setStep('HISTORY');
-      setMessages(prev => [...prev, { id: Date.now().toString() + "bot", sender: "bot", text: "Nearly there. Do you have any existing medical conditions or history I should know about? (Type 'None' if not)", type: "clarification" }]);
-      return;
-    }
-    if (step === 'HISTORY') {
-      setUserData(prev => ({ ...prev, medical_history: text }));
-      setStep('SYMPTOMS');
-      setMessages(prev => [...prev, { id: Date.now().toString() + "bot", sender: "bot", text: "Profile updated. Now, please describe the symptoms you are currently experiencing.", type: "clarification" }]);
-      return;
-    }
-
     setLoading(true);
     try {
-      if (text.toLowerCase().startsWith('/update ')) {
-        const disease = text.slice(8).trim();
-        const res = await fetch("http://localhost:8000/update_disease", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ disease_name: disease })
-        });
-        const data = await res.json();
-        setMessages(prev => [...prev, {
-          id: Date.now().toString() + "bot",
-          sender: "bot",
-          text: data.message || "Updated successfully.",
-          type: "update"
-        }]);
-      } else {
-        const symptomMessages = messages.filter(m => {
-          if (m.sender === 'bot') {
-            return !['Welcome to Medisense.', 'Got it. What is your gender?', 'Thank you. Where are you currently located?', 'Nearly there. Do you have any existing medical conditions', 'Profile updated. Now, please describe'].some(t => m.text.includes(t));
+        // Calculate the UPDATED userData immediately to avoid async state lag
+        const updatedUserData = { ...userData };
+        if (step === 'AGE') updatedUserData.age = text;
+        else if (step === 'GENDER') updatedUserData.gender = text;
+        else if (step === 'LOCATION') updatedUserData.location = text;
+        else if (step === 'HISTORY') updatedUserData.medical_history = text;
+
+        // Build a CLEAN, LABELED history for the backend
+        // CRITICAL: include followup questions in bot messages so agents can see what was asked
+        const chatHistoryForBackend = messages.map(m => {
+          let content = m.text;
+          // Append followup questions to bot messages so agents see what was asked
+          if (m.sender === 'bot' && m.diseases && Array.isArray(m.diseases) && m.diseases.length > 0) {
+            content = content + '\n\nDoctor asked: ' + m.diseases.join(' | ');
           }
-          return true; 
+          return {
+            role: m.sender === 'user' ? 'user' : 'assistant',
+            content
+          };
         });
 
-        const chatHistoryForBackend = [...symptomMessages, userMsg].map(m => ({
-          role: m.sender === 'user' ? 'user' : 'assistant',
-          content: m.text
-        }));
+        const formData = new FormData();
+        const requestPayload = {
+            user_input: text,
+            user_data: updatedUserData,
+            chat_history: chatHistoryForBackend
+        };
+        formData.append("user_data_json", JSON.stringify(requestPayload));
+        if (imageFile) formData.append("file", imageFile);
 
         const res = await fetch("http://localhost:8000/chat", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ 
-            user_input: text,
-            user_data: userData,
-            chat_history: chatHistoryForBackend
-          })
+          body: formData
         });
         const data = await res.json();
         
-        let botText = data.message;
-        if (data.type === 'clarification' && data.followup_questions && data.followup_questions.length > 0) {
-          botText += "\n\nFollow-up Questions:\n" + data.followup_questions.map((q: string, i: number) => `${i+1}. ${q}`).join("\n");
-        }
+        // Finalize state sync after successful backend response
+        setUserData(updatedUserData);
+
+        // Determine the NEXT step based on the BOT'S response
+        if (data.message.toLowerCase().includes("age")) setStep('AGE');
+        else if (data.message.toLowerCase().includes("gender")) setStep('GENDER');
+        else if (data.message.toLowerCase().includes("located")) setStep('LOCATION');
+        else if (data.message.toLowerCase().includes("medical conditions")) setStep('HISTORY');
+        else setStep('SYMPTOMS');
+
+        // Store bot message - include followup questions in the TEXT for history tracking
+        const followupText = (data.followup_questions && data.followup_questions.length > 0)
+          ? '\n\nDoctor asked: ' + data.followup_questions.join(' | ')
+          : '';
 
         setMessages(prev => [...prev, {
           id: Date.now().toString() + "bot",
           sender: "bot",
-          text: botText,
+          text: data.message + followupText,
           type: data.type,
           hypotheses: data.hypotheses,
+          diseases: data.followup_questions,
           reasoning: data.reasoning,
           precautions: data.precautions,
           urgency: data.urgency
         }]);
-      }
     } catch (error) {
       setMessages(prev => [...prev, {
         id: Date.now().toString() + "err",
         sender: "bot",
-        text: "Error connecting to the backend server. Make sure the FastAPI app is running on port 8000.",
+        text: "Connection Error. Check API server.",
         type: "error"
       }]);
     }
     setLoading(false);
   };
 
+  const suggestions = [
+    "High fever, severe headache and body aches for 2 days",
+    "Persistent cough, chest tightness and breathlessness",
+    "Excessive thirst, frequent urination and constant fatigue",
+    "Skin rash with joint pain, fever and swollen lymph nodes"
+  ];
+
+  const handleSuggestion = (text: string) => {
+    if (step === 'SYMPTOMS') {
+        processDiagnosticFlow(text);
+    }
+  };
+
+  const deleteSession = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    setSessions(prev => prev.filter(s => s.id !== id));
+    if (id === currentSessionId) {
+        startNewChat();
+    }
+  };
+
   return (
     <div className="app-container">
-      <div className="chat-window">
-        <header className="chat-header">
-          <h1>Medisense AI</h1>
-          <span className="status">Diagnostic Center</span>
+      {/* Left Sidebar: History */}
+      <aside className="sidebar">
+        <div className="sidebar-header">Chat History</div>
+        <button 
+            className="history-item" 
+            onClick={startNewChat}
+            style={{ background: '#22c55e', color: 'white', border: 'none', width: '100%', marginBottom: '24px', padding: '10px', justifyContent: 'center' }}
+        >
+          + New Conversation
+        </button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {sessions.length > 0 ? sessions.map(s => (
+                <div key={s.id} className={`history-item ${s.id === currentSessionId ? 'active' : ''}`} onClick={() => loadSession(s)} style={{ border: s.id === currentSessionId ? '1px solid #22c55e' : '1px solid transparent' }}>
+                    <div style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {s.messages[s.messages.length - 1]?.text.substring(0, 30)}...
+                        <div style={{ fontSize: '0.65rem', opacity: 0.7 }}>{new Date(s.timestamp).toLocaleTimeString()}</div>
+                    </div>
+                    <button className="delete-btn" onClick={(e) => deleteSession(e, s.id)}>✕</button>
+                </div>
+            )) : <p style={{ fontSize: '0.75rem', color: '#94a3b8' }}>No past conversations yet.</p>}
+        </div>
+        
+        <div className="sidebar-header" style={{ marginTop: '40px' }}>Medical Profile</div>
+        {userData.age ? (
+            <div style={{ fontSize: '0.8rem', color: '#475569' }}>
+                <p><b>Age:</b> {userData.age}</p>
+                <p><b>Gender:</b> {userData.gender}</p>
+                <p><b>History:</b> {userData.medical_history || 'None'}</p>
+            </div>
+        ) : <p style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Complete onboarding to view profile.</p>}
+      </aside>
+
+      {/* Main Content Area */}
+      <main className="main-chat-container">
+        <header className="main-header">
+          <div className="brand">
+            <h1>Aarogya Doot</h1>
+            <span>आरोग्य दूत · Diagnostic Console</span>
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+             <button className="send-btn" onClick={startNewChat} style={{ background: '#f1f5f9', color: '#475569' }}>+ New Chat</button>
+             <div className="status" style={{ background: 'white', padding: '4px 12px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 700 }}>
+                • LIVE
+             </div>
+          </div>
         </header>
 
-        <div className="chat-messages">
-          {messages.map(msg => (
-            <div key={msg.id} className={`message-bubble ${msg.sender} ${msg.type === 'alert' ? 'alert-bubble' : ''}`}>
-              <div className="message-content">
-                <p>{msg.text}</p>
-                {msg.type === 'diagnosis' && msg.hypotheses && msg.hypotheses.length > 0 && (
-                  <div className="precautions-card" style={{marginTop: '12px'}}>
-                    <h4>Clinical Hypotheses:</h4>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      {msg.hypotheses.map((h, i) => (
-                        <div key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '6px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', color: '#f8fafc' }}>
-                            <strong>{h.disease}</strong>
-                            <span style={{ color: h.confidence > 70 ? '#4ade80' : '#fbbf24' }}>{h.confidence}%</span>
-                          </div>
-                          <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: '#94a3b8' }}>{h.reasoning}</p>
-                        </div>
-                      ))}
-                    </div>
+        <div className="chat-scroll">
+          {messages.length === 1 && step === 'SYMPTOMS' ? (
+            <div className="welcome-screen">
+              <span>HOW CAN AAROGYA DOOT HELP YOU TODAY?</span>
+              <h2>Describe your symptoms.</h2>
+              <p>Type in plain Hindi or English. Our 6-agent pipeline will extract, triage, and deliver a ranked clinical assessment in seconds.</p>
+              
+              <div className="suggestions-grid">
+                {suggestions.map((s, i) => (
+                  <div key={i} className="suggestion-card" onClick={() => handleSuggestion(s)}>
+                    {s}
                   </div>
-                )}
-                {msg.type === 'diagnosis' && msg.urgency && (
-                   <div style={{ marginTop: '12px' }}>
-                     <div className="risk-indicator" style={{ 
-                       background: msg.urgency.includes('Immediate') ? 'rgba(239, 68, 68, 0.4)' : 'rgba(59, 130, 246, 0.4)',
-                       color: 'white',
-                       fontWeight: 'bold',
-                       textAlign: 'center'
-                     }}>
-                       Recommended Urgency: {msg.urgency}
-                     </div>
-                   </div>
-                )}
-                {msg.type === 'clarification' && msg.hypotheses && msg.hypotheses.length > 0 && (
-                  <div className="precautions-card" style={{marginTop: '12px', background: 'rgba(255, 255, 255, 0.05)'}}>
-                    <h5 style={{margin: '0 0 8px', color: '#94a3b8', fontSize: '0.8rem', textTransform: 'uppercase'}}>Current Differential:</h5>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                      {msg.hypotheses.map((h, i) => (
-                        <span key={i} style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: '12px', fontSize: '0.8rem', color: '#cbd5e1' }}>
-                          {h.disease} ({h.confidence}%)
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                ))}
               </div>
             </div>
-          ))}
-          {loading && (
-            <div className="message-bubble bot typing">
-              <div className="dot"></div>
-              <div className="dot"></div>
-              <div className="dot"></div>
+          ) : (
+            <div style={{ width: '100%', maxWidth: '700px' }}>
+              {messages.map((msg, idx) => (
+                <div key={msg.id} className={`msg-row ${msg.sender}`}>
+                  <div className={`bubble ${msg.sender}`}>
+                    {msg.sender === 'bot' ? (
+                        <ReactMarkdown>{msg.text}</ReactMarkdown>
+                    ) : (
+                        <p>{msg.text}</p>
+                    )}
+                    {msg.hypotheses && (
+                       <div className="diag-card">
+                          <div className="sidebar-header" style={{ marginBottom: '8px' }}>Current Differential</div>
+                          {msg.hypotheses.map((h, j) => (
+                            <div key={j} className="diag-header" style={{ borderBottom: '1px solid #e2e8f0', padding: '8px 0' }}>
+                                <div>
+                                    <span style={{ fontWeight: 600 }}>{h.disease}</span>
+                                    {msg.type === 'diagnosis' && <p style={{ fontSize: '0.75rem', color: '#64748b', margin: '4px 0' }}>{h.reasoning}</p>}
+                                </div>
+                                <span className="diag-confidence">{h.confidence}%</span>
+                            </div>
+                          ))}
+                       </div>
+                    )}
+                    
+                    {/* Follow-up Question Cards */}
+                    {msg.diseases && msg.diseases.length > 0 && (
+                        <div className="question-card">
+                            <div className="question-header">
+                                <span>📋</span> NEXT STEPS / NEEDED DETAILS
+                            </div>
+                            {msg.diseases.map((q, idx) => (
+                                <div key={idx} className="question-item">
+                                    <div className="question-num">{idx + 1}</div>
+                                    <div className="question-text">{q}</div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {loading && <div className="msg-row bot"><div className="bubble bot">Analyzing...</div></div>}
+              <div ref={bottomRef} />
             </div>
           )}
-          <div ref={bottomRef} />
         </div>
 
-        <form className="chat-input-area" onSubmit={handleSend}>
-          <div className="mic-wrapper" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <button 
-              type="button" 
-              className={`mic-button ${isRecording ? 'recording' : ''}`}
-              onClick={isRecording ? stopRecording : startRecording}
-              style={{ 
-                background: isRecording ? '#ef4444' : 'rgba(255,255,255,0.1)',
-                borderRadius: '50%',
-                width: '40px',
-                height: '40px',
-                border: 'none',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'white'
-              }}
-            >
-              {isRecording ? '⏹' : '🎤'}
-            </button>
-            <select 
-              value={selectedLanguage}
-              onChange={(e) => setSelectedLanguage(e.target.value)}
-              className="lang-selector"
-              style={{
-                background: 'rgba(255,255,255,0.1)',
-                border: 'none',
-                color: 'white',
-                borderRadius: '8px',
-                padding: '4px 8px',
-                fontSize: '0.8rem'
-              }}
-            >
-              <option value="en">EN</option>
-              <option value="hi">HI</option>
-              <option value="mr">MR</option>
-            </select>
-          </div>
-          <input 
-            type="text" 
-            placeholder="Type or use mic..." 
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            disabled={loading}
-          />
-          <button type="submit" disabled={loading || !input.trim()}>
-            Send 
-          </button>
-        </form>
-      </div>
+        <div className="input-container">
+          {imagePreview && (
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', background: 'white', padding: '8px', borderRadius: '12px' }}>
+                <img src={imagePreview} className="img-preview" />
+                <button onClick={() => {setSelectedImage(null); setImagePreview(null);}} className="icon-btn">✕</button>
+            </div>
+          )}
+          <form className="input-bar" onSubmit={handleSend}>
+             <label className="icon-btn">
+                <input type="file" hidden onChange={handleImageSelect} />
+                📎
+             </label>
+             <button type="button" className={`icon-btn ${isRecording ? 'recording' : ''}`} onClick={isRecording ? stopRecording : startRecording}>
+                {isRecording ? '⏹' : '🎤'}
+             </button>
+             <input 
+                ref={inputRef}
+                placeholder="Describe your symptoms in plain language..." 
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                disabled={loading}
+             />
+             <select 
+                value={selectedLanguage} 
+                onChange={e => setSelectedLanguage(e.target.value)}
+                style={{ border: 'none', background: 'none', fontWeight: 700, outline: 'none' }}
+             >
+                <option value="en">EN</option>
+                <option value="hi">HI</option>
+                <option value="mr">MR</option>
+             </select>
+             <button type="submit" className="send-btn" disabled={loading || (!input.trim() && !selectedImage)}>
+                ↑
+             </button>
+          </form>
+          <p style={{ textAlign: 'center', fontSize: '0.7rem', color: '#94a3b8', marginTop: '12px' }}>
+            Educational purposes only · Not a substitute for professional medical advice · Shift+Enter for new line
+          </p>
+        </div>
+      </main>
     </div>
   )
 }

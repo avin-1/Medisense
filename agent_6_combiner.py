@@ -14,46 +14,49 @@ class ConsensusSynthesizerAgent:
         symptoms_str = ", ".join(symptoms)
         db_str = ", ".join(db_predictions) if db_predictions else "None"
         llm_str = ", ".join(llm_predictions) if llm_predictions else "None"
-        
-        system_prompt = """
-        Your goal is to iteratively reduce diagnostic uncertainty by managing a set of clinical hypotheses.
-        
-        You are given:
-        1. A patient's profile (age, gender, location, history).
-        2. A patient's extracted symptoms (from the full conversational history).
-        3. Predicted diseases from a Vector DB and a Pure LLM.
-        
-        Follow this strict protocol:
-        - Maintain top 3-5 hypotheses (candidate diseases).
-        - Assign a confidence score (%) to each.
-        - Decide between "status": "IN_PROGRESS" or "status": "FINAL".
-        - Use "IN_PROGRESS" if no disease has >80% confidence and more info can be gained.
-        - Specifically identify what information is missing to rule in/out the current hypotheses.
-        
-        Output ONLY valid JSON structure:
-        {
-            "status": "FINAL" or "IN_PROGRESS",
-            "hypotheses": [
-                {"disease": "Name", "confidence": 85, "reasoning": "Why?"},
-                {"disease": "Alternative", "confidence": 10, "reasoning": "Why?"}
-            ],
-            "overall_reasoning": "Concise medical logic for the current state.",
-            "missing_info": ["Specific symptom or characteristic needed to differentiate"]
-        }
-        Do not output markdown code blocks.
-        """
-        
-        history_summary = "\n".join([f"{m['role']}: {m['content']}" for m in chat_history])
+
+        # Build a clean, labeled history for the prompt
+        history_lines = []
+        for m in chat_history:
+            role = "Doctor" if m['role'] == 'assistant' else "Patient"
+            history_lines.append(f"  {role}: {m['content']}")
+        history_summary = "\n".join(history_lines) if history_lines else "  (No prior conversation)"
+
+        system_prompt = """You are the Chief Medical Consultant AI. Your job is to synthesize all available evidence into a ranked differential diagnosis.
+
+EVIDENCE INTEGRATION PROTOCOL:
+1. Read the entire Conversation History to extract all clinical clues provided by the patient.
+2. Use these clues to ADJUST confidence scores. Examples:
+   - Patient says "gradual onset" → LOWER confidence for brain hemorrhage; RAISE for tension headache/migraine.
+   - Patient says "sudden thunderclap" → RAISE confidence for subarachnoid hemorrhage significantly.
+   - Patient says "no nausea, no light sensitivity" → LOWER migraine confidence slightly.
+   - Patient says "stiff neck" → RAISE meningitis confidence immediately.
+3. The confidence scores MUST CHANGE based on what the patient has revealed compared to the initial message.
+4. Use "IN_PROGRESS" status if confidence is still distributed and more useful info can be gathered.
+5. Use "FINAL" if one disease has clearly >70% confidence or 4+ rounds of questioning have happened.
+
+Output ONLY valid JSON — no markdown fences:
+{
+    "status": "IN_PROGRESS" or "FINAL",
+    "hypotheses": [
+        {"disease": "Disease Name", "confidence": 75, "reasoning": "Explain how history informs this score"}
+    ],
+    "overall_reasoning": "A clinical paragraph synthesizing all evidence collected in the conversation.",
+    "missing_info": ["What specific detail would most improve confidence?"]
+}"""
+
         user_prompt = f"""
-        Conversation History:
-        {history_summary}
-        
-        Patient Profile: {patient_info}
-        Symptoms Extracted So Far: {symptoms_str}
-        DB Predictions: {db_str}
-        LLM Predictions: {llm_str}
-        """
-        
+Patient Profile: {patient_info}
+Symptoms Extracted: {symptoms_str}
+
+Conversation History:
+{history_summary}
+
+Database Agent Predictions: {db_str}
+LLM Agent Predictions: {llm_str}
+
+Based on ALL of the above, synthesize the differential diagnosis with updated confidence scores:"""
+
         try:
             completion = self.client.chat.completions.create(
                 model=self.model,
@@ -61,7 +64,7 @@ class ConsensusSynthesizerAgent:
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                temperature=0.3
+                temperature=0.2
             )
             content = completion.choices[0].message.content.strip()
             

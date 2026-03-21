@@ -12,30 +12,45 @@ class FollowupAgent:
 
     def generate_questions(self, extracted_symptoms: list[str], potential_diseases: list[str], patient_info: str = "", missing_info: list[str] = [], chat_history: list[dict] = []) -> list[str]:
         """
-        Generates 2-3 follow-up questions to clarify symptoms or differentiate between diseases.
+        Generates exactly ONE targeted follow-up question, never repeating what has been asked.
         """
         if not extracted_symptoms:
             return ["Could you please describe your symptoms in more detail? For example, where is the pain, or how long have you felt this way?"]
 
-        system_prompt = """
-        You are an expert Clinical Interviewer AI. 
-        Your goal is to ask EXACTLY ONE highly targeted, professional follow-up question to a patient.
-        This question must maximize "Information Gain" to help differentiate between the current hypotheses.
-        
-        CRITICAL: Review the "Conversation History" provided. NEVER ask a question that has already been asked or addressed in the history. Focus on PROGRESSION.
-        
-        Focus on:
-        1. Missing information identified by the Chief Medical Officer.
-        2. Ruling out high-risk "Red Flag" conditions.
-        3. Differentiating between two similar candidate diseases.
-        
-        Output ONLY a RAW JSON array containing EXACTLY ONE string (the question).
-        Example: ["Does the pain radiate to your left arm or jaw?"]
-        """
-        
-        history_summary = "\n".join([f"{m['role']}: {m['content']}" for m in chat_history])
-        user_prompt = f"Conversation History:\n{history_summary}\n\nPatient Profile: {patient_info}\nExtracted Symptoms: {', '.join(extracted_symptoms)}\nMissing Info Needed: {', '.join(missing_info)}\nTop Hypotheses: {potential_diseases}"
-        
+        # Build a clear history for the prompt
+        history_lines = []
+        for m in chat_history:
+            role = "Doctor" if m['role'] == 'assistant' else "Patient"
+            history_lines.append(f"{role}: {m['content']}")
+        history_summary = "\n".join(history_lines)
+
+        system_prompt = """You are an expert Clinical Interviewer AI. Your goal is to ask EXACTLY ONE highly targeted, professional follow-up question to narrow the diagnosis.
+
+STRICT MEMORY PROTOCOL — YOU MUST FOLLOW THIS:
+1. Read the ENTIRE Conversation History below.
+2. List every topic the Doctor has ALREADY asked about.
+3. List every key detail the Patient has ALREADY mentioned (e.g., onset, duration, severity, location).
+4. Your new question MUST be on a COMPLETELY DIFFERENT TOPIC from anything already discussed.
+5. If onset (sudden vs gradual) has been addressed → ask about ASSOCIATED SYMPTOMS (nausea, vision changes, neck stiffness, fever).
+6. If associated symptoms have been addressed → ask about TRIGGERS (stress, food, sleep, posture).
+7. If triggers have been addressed → ask about FAMILY HISTORY or past episodes.
+
+NEVER ask: "Did it come on suddenly?" or any variant if ANY answer about onset timing exists in the history.
+
+Output ONLY a valid JSON array with EXACTLY ONE string question.
+Example: ["Have you noticed any nausea, sensitivity to light, or blurred vision along with the headache?"]
+"""
+
+        user_prompt = f"""Conversation History:
+{history_summary}
+
+Patient Profile: {patient_info}
+Symptoms Identified: {', '.join(extracted_symptoms)}
+Top Hypotheses: {potential_diseases}
+Missing Info Per CMO: {', '.join(missing_info)}
+
+Now generate ONE new follow-up question that has NOT been asked before:"""
+
         try:
             completion = self.client.chat.completions.create(
                 model=self.model,
@@ -43,7 +58,7 @@ class FollowupAgent:
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                temperature=0.4
+                temperature=0.2
             )
             content = completion.choices[0].message.content.strip()
             
@@ -58,4 +73,4 @@ class FollowupAgent:
             
         except Exception as e:
             print(f"Follow-up Generation Error: {e}")
-            return ["Could you tell me more about any other symptoms you might be experiencing?"]
+            return ["Have you noticed any nausea, sensitivity to light, or neck stiffness along with your main symptom?"]
