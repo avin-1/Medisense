@@ -10,7 +10,7 @@ class ConsensusSynthesizerAgent:
         self.client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
         self.model = model
 
-    def synthesize(self, symptoms: list[str], db_predictions: list[str], llm_predictions: list[str], patient_info: str = "") -> dict:
+    def synthesize(self, symptoms: list[str], db_predictions: list[str], llm_predictions: list[str], patient_info: str = "", chat_history: list[dict] = []) -> dict:
         symptoms_str = ", ".join(symptoms)
         db_str = ", ".join(db_predictions) if db_predictions else "None"
         llm_str = ", ".join(llm_predictions) if llm_predictions else "None"
@@ -43,9 +43,13 @@ class ConsensusSynthesizerAgent:
         Do not output markdown code blocks.
         """
         
+        history_summary = "\n".join([f"{m['role']}: {m['content']}" for m in chat_history])
         user_prompt = f"""
+        Conversation History:
+        {history_summary}
+        
         Patient Profile: {patient_info}
-        Symptoms: {symptoms_str}
+        Symptoms Extracted So Far: {symptoms_str}
         DB Predictions: {db_str}
         LLM Predictions: {llm_str}
         """

@@ -100,7 +100,7 @@ async def process_chat(request: ChatRequest):
     if is_emergency:
         db_predictions = controller.agent_2.retrieve_disease(extracted_symptoms, top_k=3)
         llm_predictions = controller.agent_5.predict(extracted_symptoms, patient_info=context_prefix)
-        consensus = controller.agent_6.synthesize(extracted_symptoms, db_predictions, llm_predictions, patient_info=context_prefix)
+        consensus = controller.agent_6.synthesize(extracted_symptoms, db_predictions, llm_predictions, patient_info=context_prefix, chat_history=chat_history)
         
         response_data = {
             "type": "alert",
@@ -115,7 +115,7 @@ async def process_chat(request: ChatRequest):
     # Step 3: Multi-Agent Diagnostic Consensus (Iterative)
     db_predictions = controller.agent_2.retrieve_disease(extracted_symptoms, top_k=3)
     llm_predictions = controller.agent_5.predict(extracted_symptoms, patient_info=context_prefix)
-    consensus = controller.agent_6.synthesize(extracted_symptoms, db_predictions, llm_predictions, patient_info=context_prefix)
+    consensus = controller.agent_6.synthesize(extracted_symptoms, db_predictions, llm_predictions, patient_info=context_prefix, chat_history=chat_history)
     
     hypotheses = consensus["hypotheses"]
     status = consensus["status"]
