@@ -20,6 +20,8 @@ interface Message {
   precautions?: string[];
   riskScore?: number;
   urgency?: string;
+  doctorsList?: Record<string, any[]>;
+  isLoadingDoctors?: boolean;
 }
 
 type OnboardingStep = 'AGE' | 'GENDER' | 'LOCATION' | 'HISTORY' | 'SYMPTOMS';
@@ -179,6 +181,36 @@ function App() {
       setExplainModal({ text, explanation: 'Could not fetch explanation. Please check the server.' });
     } finally {
       setExplainLoading(false);
+    }
+  };
+
+  const handleSeeDoctors = async (messageId: string, diseases: string[]) => {
+    setMessages(prev => prev.map(m => 
+      m.id === messageId ? { ...m, isLoadingDoctors: true } : m
+    ));
+    
+    try {
+       const res = await fetch("http://localhost:8000/search_doctors", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ diseases, location: userData.location || "India" })
+       });
+       const data = await res.json();
+       
+       if (data.status === "success") {
+          setMessages(prev => prev.map(m => 
+             m.id === messageId ? { ...m, isLoadingDoctors: false, doctorsList: data.results } : m
+          ));
+       } else {
+          setMessages(prev => prev.map(m => 
+             m.id === messageId ? { ...m, isLoadingDoctors: false } : m
+          ));
+       }
+    } catch (err) {
+       console.error("Failed to fetch doctors:", err);
+       setMessages(prev => prev.map(m => 
+          m.id === messageId ? { ...m, isLoadingDoctors: false } : m
+       ));
     }
   };
 
@@ -461,10 +493,46 @@ function App() {
                                 <div>
                                     <span style={{ fontWeight: 600 }}>{h.disease}</span>
                                     {msg.type === 'diagnosis' && <p style={{ fontSize: '0.75rem', color: '#64748b', margin: '4px 0' }}>{h.reasoning}</p>}
+                                    {msg.doctorsList && msg.doctorsList[h.disease] && msg.doctorsList[h.disease].length > 0 && (
+                                       <div style={{ marginTop: '8px', padding: '8px', background: '#f8fafc', borderRadius: '6px', fontSize: '0.75rem' }}>
+                                          <div style={{ fontWeight: 600, marginBottom: '4px', color: '#0f172a' }}>Recommended Doctors/Hospitals near you:</div>
+                                          <ul style={{ paddingLeft: '0', listStyleType: 'none', margin: 0, color: '#475569' }}>
+                                             {msg.doctorsList[h.disease].map((doc: any, i: number) => (
+                                                <li key={i} style={{ marginBottom: '12px', borderBottom: '1px solid #e2e8f0', paddingBottom: '8px' }}>
+                                                   <div style={{ fontWeight: 600, color: '#0f172a', fontSize: '0.8rem' }}>
+                                                      {doc.name || doc.title}
+                                                   </div>
+                                                   {(doc.speciality || doc.clinic || doc.location) && (
+                                                      <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                                         {doc.speciality && <span>👨‍⚕️ <b>Speciality:</b> {doc.speciality}</span>}
+                                                         {doc.clinic && <span>🏥 <b>Clinic/Hospital:</b> {doc.clinic}</span>}
+                                                         {doc.location && <span>📍 <b>Location:</b> {doc.location}</span>}
+                                                      </div>
+                                                   )}
+                                                   <a href={doc.url} target="_blank" rel="noopener noreferrer" style={{ color: '#2563eb', textDecoration: 'none', fontSize: '0.75rem', display: 'inline-block', marginTop: '6px' }}>
+                                                      Visit Website / View Details →
+                                                   </a>
+                                                </li>
+                                             ))}
+                                          </ul>
+                                       </div>
+                                    )}
                                 </div>
                                 <span className="diag-confidence">{h.confidence}%</span>
                             </div>
                           ))}
+                          
+                          {msg.type === 'diagnosis' && !msg.doctorsList && (
+                             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px' }}>
+                               <button 
+                                 onClick={() => handleSeeDoctors(msg.id, msg.hypotheses?.slice(0, 2).map((h: any) => h.disease) || [])}
+                                 disabled={msg.isLoadingDoctors}
+                                 style={{ background: '#3b82f6', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '6px', fontSize: '0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                               >
+                                 {msg.isLoadingDoctors ? 'Searching...' : <><span>🩺</span> See Doctors</>}
+                               </button>
+                             </div>
+                          )}
                        </div>
                     )}
                     

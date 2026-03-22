@@ -47,6 +47,10 @@ class ChatRequest(BaseModel):
 class UpdateRequest(BaseModel):
     disease_name: str
 
+class SearchDoctorsRequest(BaseModel):
+    diseases: list[str]
+    location: str
+
 class APIController:
     def __init__(self):
         print("Starting API Controller Agents...")
@@ -370,9 +374,81 @@ async def transcribe_audio(file: UploadFile = File(...), language: str = None):
         text = controller.agent_9.transcribe(file_path, language=language)
         return {"text": text}
     finally:
-        # Cleanup
         if os.path.exists(file_path):
             os.remove(file_path)
+
+@app.post("/search_doctors")
+async def search_doctors(req: SearchDoctorsRequest):
+    import os, json
+    import requests
+    from groq import Groq
+    
+    tavily_key = os.environ.get("TAVILY_API_KEY")
+    groq_key = os.environ.get("GROQ_API_KEY")
+    if not tavily_key or not groq_key:
+         raise HTTPException(status_code=500, detail="API keys not configured")
+         
+    client = Groq(api_key=groq_key)
+    results = {}
+    for disease in req.diseases:
+        query = f"top doctors and hospitals for {disease} in {req.location}"
+        try:
+            resp = requests.post(
+                "https://api.tavily.com/search",
+                json={
+                    "api_key": tavily_key,
+                    "query": query,
+                    "search_depth": "basic",
+                    "include_answer": False,
+                    "max_results": 5
+                },
+                timeout=10
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                raw_results = data.get("results", [])
+                
+                prompt = f"""
+                Extract a structured list of doctors and hospitals from the following search results for '{disease}' in '{req.location}'.
+                Return ONLY a JSON array of objects. Do not include any markdown formatting like ```json.
+                Each object must have exactly these keys:
+                - "name": The doctor's name or hospital name.
+                - "speciality": The doctor's speciality (if mentioned, otherwise empty string).
+                - "clinic": The clinic or hospital name (if it's a doctor, otherwise same as name).
+                - "location": The location/area (if mentioned, else '{req.location}').
+                - "url": The source URL from the results.
+                
+                Search Results:
+                {json.dumps(raw_results)}
+                """
+                
+                try:
+                    llm_resp = client.chat.completions.create(
+                        model="openai/gpt-oss-120b",
+                        messages=[{"role": "user", "content": prompt}],
+                        temperature=0.1
+                    )
+                    
+                    structured_data = llm_resp.choices[0].message.content.strip()
+                    if structured_data.startswith("```"):
+                        structured_data = structured_data.split("```")[1]
+                        if structured_data.startswith("json"):
+                            structured_data = structured_data[4:].strip()
+                            
+                    parsed_json = json.loads(structured_data)
+                    results[disease] = parsed_json
+                except Exception as e:
+                    logger.error(f"Failed to parse LLM JSON: {e}")
+                    results[disease] = raw_results
+            else:
+                logger.error(f"Tavily API Error: {resp.text}")
+                results[disease] = []
+        except Exception as e:
+            logger.error(f"Error fetching doctors for {disease}: {e}")
+            results[disease] = []
+            
+    return {"status": "success", "results": results}            
+    return {"status": "success", "results": results}
 
 @app.post("/update_disease")
 async def update_disease(request: UpdateRequest):
