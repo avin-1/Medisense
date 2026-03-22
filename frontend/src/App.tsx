@@ -215,11 +215,15 @@ function App() {
     setLoading(true);
     try {
         // Calculate the UPDATED userData immediately to avoid async state lag
+        // Only update profile fields during active onboarding, never during diagnosis
         const updatedUserData = { ...userData };
-        if (step === 'AGE') updatedUserData.age = text;
-        else if (step === 'GENDER') updatedUserData.gender = text;
-        else if (step === 'LOCATION') updatedUserData.location = text;
-        else if (step === 'HISTORY') updatedUserData.medical_history = text;
+        const isOnboarding = step !== 'SYMPTOMS';
+        if (isOnboarding) {
+          if (step === 'AGE') updatedUserData.age = text;
+          else if (step === 'GENDER') updatedUserData.gender = text;
+          else if (step === 'LOCATION') updatedUserData.location = text;
+          else if (step === 'HISTORY') updatedUserData.medical_history = text;
+        }
 
         // Build a CLEAN, LABELED history for the backend
         // CRITICAL: include followup questions in bot messages so agents can see what was asked
@@ -253,12 +257,17 @@ function App() {
         // Finalize state sync after successful backend response
         setUserData(updatedUserData);
 
-        // Determine the NEXT step based on the BOT'S response
-        if (data.message.toLowerCase().includes("age")) setStep('AGE');
-        else if (data.message.toLowerCase().includes("gender")) setStep('GENDER');
-        else if (data.message.toLowerCase().includes("located")) setStep('LOCATION');
-        else if (data.message.toLowerCase().includes("medical conditions")) setStep('HISTORY');
-        else setStep('SYMPTOMS');
+        // Determine next step — ONLY during onboarding, never once profile is complete
+        // Use strict prefix/question matching to avoid false triggers from clinical text
+        if (step !== 'SYMPTOMS') {
+          const msg = data.message.toLowerCase();
+          if (msg.includes("what is your age") || msg.includes("your age?")) setStep('AGE');
+          else if (msg.includes("what is your gender") || msg.includes("your gender?")) setStep('GENDER');
+          else if (msg.includes("currently located") || msg.includes("where are you")) setStep('LOCATION');
+          else if (msg.includes("medical conditions") || msg.includes("medical history")) setStep('HISTORY');
+          else if (msg.includes("describe the symptoms") || msg.includes("describe your symptoms")) setStep('SYMPTOMS');
+        }
+        // If already in SYMPTOMS, NEVER change step back — profile is locked
 
         // Store bot message - include followup questions in the TEXT for history tracking
         const followupText = (data.followup_questions && data.followup_questions.length > 0)
