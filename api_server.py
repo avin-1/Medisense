@@ -104,6 +104,69 @@ class APIController:
 
 controller = APIController()
 
+class ExplainRequest(BaseModel):
+    selected_text: str
+    chat_history: list = []
+    language: str = "en"
+
+@app.post("/explain")
+async def explain_text(req: ExplainRequest):
+    """Takes a selected medical term and returns a simple layman explanation in the user's language."""
+    import json, os
+    from groq import Groq
+    
+    client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+    
+    lang_map = {
+        "en": "English — use simple, everyday English words. Avoid all medical jargon.",
+        "hi": "Hindi — write in simple Hindi. Use Devanagari script.",
+        "mr": "Marathi — write in simple Marathi. Use Devanagari script.",
+        "hinglish": "Hinglish — mix simple Hindi words with English like a normal Indian conversation."
+    }
+    lang_instruction = lang_map.get(req.language, lang_map["en"])
+    
+    history_summary = "\n".join([
+        f"{'Patient' if m.get('role') == 'user' else 'Doctor'}: {m.get('content', '')}"
+        for m in req.chat_history[-10:]  # Last 10 turns for context
+    ])
+    
+    system_prompt = f"""You are a friendly health educator explaining medical terms to a common person.
+    
+LANGUAGE: {lang_instruction}
+
+RULES:
+1. Explain the selected text in 3-5 SIMPLE sentences.
+2. Use analogies, everyday examples (like comparing a virus to a thief, a headache to pressure in a balloon).
+3. NEVER use complicated medical terms without explaining them.
+4. End with ONE simple practical tip the person can follow.
+5. Be warm, reassuring, not scary.
+6. Use the conversation context to personalize the explanation (e.g., mention their specific symptoms if relevant).
+"""
+    
+    user_prompt = f"""The patient selected this text to understand better:
+"{req.selected_text}"
+
+Conversation context:
+{history_summary}
+
+Explain this in a very simple, warm, friendly way:"""
+    
+    try:
+        completion = client.chat.completions.create(
+            model="openai/gpt-oss-120b",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.5,
+            max_tokens=400
+        )
+        explanation = completion.choices[0].message.content.strip()
+        return {"explanation": explanation}
+    except Exception as e:
+        logger.error(f"Explain endpoint error: {e}")
+        return {"explanation": "Sorry, I couldn't generate an explanation right now. Please try again."}
+
 @app.post("/chat")
 async def process_chat(
     user_data_json: str = Form(...), 

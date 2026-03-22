@@ -65,6 +65,11 @@ function App() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Select-to-Explain state
+  const [explainTooltip, setExplainTooltip] = useState<{x: number; y: number; text: string} | null>(null);
+  const [explainModal, setExplainModal] = useState<{text: string; explanation: string | null} | null>(null);
+  const [explainLoading, setExplainLoading] = useState(false);
+
   // Sync current state to sessions list
   useEffect(() => {
     setSessions(prev => {
@@ -119,6 +124,63 @@ function App() {
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, []);
+
+  // Select-to-Explain: show tooltip on text selection inside chat
+  useEffect(() => {
+    const handleMouseUp = (e: MouseEvent) => {
+      const selection = window.getSelection();
+      const selectedText = selection?.toString().trim();
+      if (!selectedText || selectedText.length < 3) {
+        setExplainTooltip(null);
+        return;
+      }
+      const target = e.target as HTMLElement;
+      if (!target.closest('.chat-messages')) {
+        setExplainTooltip(null);
+        return;
+      }
+      // Use the selection range rect to position tooltip ABOVE the selected text
+      const range = selection?.getRangeAt(0);
+      const rect = range?.getBoundingClientRect();
+      if (rect) {
+        setExplainTooltip({ 
+          x: rect.left + rect.width / 2, 
+          y: rect.top - 10,  // 10px above the selection top
+          text: selectedText 
+        });
+      }
+    };
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => document.removeEventListener('mouseup', handleMouseUp);
+  }, []);
+
+  const handleExplain = async (text: string) => {
+    setExplainTooltip(null);
+    setExplainModal({ text, explanation: null });
+    setExplainLoading(true);
+    window.getSelection()?.removeAllRanges();
+    try {
+      const chatHistoryForExplain = messages.map(m => ({
+        role: m.sender === 'user' ? 'user' : 'assistant',
+        content: m.text
+      }));
+      const res = await fetch('http://localhost:8000/explain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          selected_text: text,
+          chat_history: chatHistoryForExplain,
+          language: selectedLanguage
+        })
+      });
+      const data = await res.json();
+      setExplainModal({ text, explanation: data.explanation });
+    } catch {
+      setExplainModal({ text, explanation: 'Could not fetch explanation. Please check the server.' });
+    } finally {
+      setExplainLoading(false);
+    }
+  };
 
   const [selectedLanguage, setSelectedLanguage] = useState<string>("en");
   const [isRecording, setIsRecording] = useState(false);
@@ -356,7 +418,7 @@ function App() {
         <header className="main-header">
           <div className="brand">
             <h1>Aarogya Doot</h1>
-            <span>आरोग्य दूत · Diagnostic Console</span>
+            <span>आरोग्य दूत</span>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
              <button className="send-btn" onClick={startNewChat} style={{ background: '#f1f5f9', color: '#475569' }}>+ New Chat</button>
@@ -382,7 +444,7 @@ function App() {
               </div>
             </div>
           ) : (
-            <div style={{ width: '100%', maxWidth: '700px' }}>
+            <div className="chat-messages" style={{ width: '100%', maxWidth: '700px' }}>
               {messages.map((msg, idx) => (
                 <div key={msg.id} className={`msg-row ${msg.sender}`}>
                   <div className={`bubble ${msg.sender}`}>
@@ -469,6 +531,45 @@ function App() {
           </p>
         </div>
       </main>
+
+      {/* Floating Tooltip on text selection */}
+      {explainTooltip && (
+        <div
+          className="explain-tooltip"
+          style={{ 
+            position: 'fixed',
+            top: explainTooltip.y - 40, // appear above the selection
+            left: explainTooltip.x, 
+            transform: 'translateX(-50%)' 
+          }}
+          onMouseDown={e => { e.preventDefault(); handleExplain(explainTooltip.text); }}
+        >
+          💡 Explain this
+        </div>
+      )}
+
+      {/* Explain Modal */}
+      {explainModal && (
+        <div className="explain-modal-backdrop" onClick={() => setExplainModal(null)}>
+          <div className="explain-modal" onClick={e => e.stopPropagation()}>
+            <div className="explain-modal-header">
+              <h3>💡 Simple Explanation</h3>
+              <button className="explain-modal-close" onClick={() => setExplainModal(null)}>✕</button>
+            </div>
+            <div className="explain-selected-text">"{explainModal.text}"</div>
+            <div className="explain-modal-body">
+              {explainLoading ? (
+                <div className="explain-loading">
+                  <div className="explain-spinner" />
+                  Generating friendly explanation...
+                </div>
+              ) : (
+                <ReactMarkdown>{explainModal.explanation ?? ''}</ReactMarkdown>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
